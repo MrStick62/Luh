@@ -41,21 +41,35 @@ function Lexer.ScanTokens(Self: Lexer): { Token }
 end
 
 function Lexer.ScanToken(Self: Lexer)
-    local Char = Self.Source:sub(Self.Current, Self.Current)
+    local Char = Self:PeekChar()
 
     local Action = Lexer.ReadChar[Char]
 
     if Action then
         Action(Self)
-    else
-        Error.Report(Self.Line, "", `Unexpected character '{Char}'`, Error.Severity.Halt)
-        Self:Consume()
+        return
     end
+
+    if Self:IsDigit(Char) then
+        Self:ReadNumber()
+        return
+    end
+
+    if Self:IsAlpha(Char) then
+        Self:ReadIdentifier()
+        return
+    end
+
+    Error.Report(Self.Line, "", `Unexpected character '{Char}'`, Error.Severity.Halt)
+    Self:Consume()
+end
+
+function Lexer.GetCurrentLexeme(Self: Lexer): string
+    return Self.Source:sub(Self.Start, Self.Current - 1)
 end
 
 function Lexer.AddToken(Self: Lexer, Type: number)
-    local Lexeme = Self.Source:sub(Self.Start, Self.Current - 1)
-    table.insert(Self.Tokens, Token.New(Type, Lexeme, Self.Start))
+    table.insert(Self.Tokens, Token.New(Type, Self:GetCurrentLexeme(), Self.Start))
 end
 
 function Lexer.Consume(Self: Lexer)
@@ -66,13 +80,50 @@ function Lexer.AddLine(Self: Lexer)
     Self.Line += 1
 end
 
-function Lexer.PeekChar(Self: Lexer, Offset: number?)
+function Lexer.PeekChar(Self: Lexer, Offset: number?): string
     local Index = Self.Current + (Offset or 0)
     return Self.Source:sub(Index, Index)
 end
 
 function Lexer.IsAtEnd(Self: Lexer)
     return Self.Current > #Self.Source
+end
+
+function Lexer.IsDigit(Self: Lexer, Char: string): boolean
+    local Num = Char:byte()
+    return string.byte('0') <= Num and Num <= string.byte('9')
+end
+
+function Lexer.IsAlpha(Self: Lexer, Char: string): boolean
+    local Num = Char:byte()
+    local IsLower = string.byte('a') <= Num and Num <= string.byte('z')
+    local IsUpper = string.byte('A') <= Num and Num <= string.byte('Z')
+    return IsUpper or IsLower
+end
+
+function Lexer.ReadNumber(Self: Lexer)
+    while Self:IsDigit(Self:PeekChar()) do
+        Self:Consume()
+    end
+
+    if Self:PeekChar() == '.' and Self:IsDigit(Self:PeekChar(1)) then
+        Self:Consume()
+
+        while Self:IsDigit(Self:PeekChar()) do
+            Self:Consume()
+        end
+    end
+
+    Self:AddToken(Token.Types.Number)
+end
+
+function Lexer.ReadIdentifier(Self: Lexer)
+    while Self:IsAlpha(Self:PeekChar()) do
+        Self:Consume()
+    end
+
+    local Word = Self:GetCurrentLexeme()
+    Self:AddToken(Lexer.Keywords[Word] or Token.Types.Identifier)
 end
 
 Lexer.ReadChar = {
@@ -204,5 +255,28 @@ Lexer.ReadChar = {
         Self:AddLine()
     end
 } :: { [string] : (Self: Lexer) -> () }
+
+Lexer.Keywords = {
+    And = Token.Types.And,
+    Break = Token.Types.Break,
+    Do = Token.Types.Do,
+    Else = Token.Types.Else,
+    Elseif = Token.Types.Elseif,
+    End = Token.Types.End,
+    False = Token.Types.False,
+    For = Token.Types.For,
+    Fun = Token.Types.Fun,
+    If = Token.Types.If,
+    In = Token.Types.In,
+    Nil = Token.Types.Nil,
+    Not = Token.Types.Not,
+    Or = Token.Types.Or,
+    Return = Token.Types.Return,
+    Then = Token.Types.Then,
+    True = Token.Types.True,
+    Type = Token.Types.Type,
+    Var = Token.Types.Var,
+    While = Token.Types.While,
+}
 
 return Lexer
