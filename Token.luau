@@ -6,66 +6,71 @@ Token.__index = Token
 type TokenData = {
     Type: number,
     Lexeme: string,
-    Line: number,
+    Location: number,
 }
 
 export type Token = typeof(setmetatable({} :: TokenData, Token))
 
-function Token.New(Type: number, Lexeme: string, Line: number): Token
+function Token.New(Type: number, Lexeme: string, Location: number): Token
     local Self = {}
 
     Self.Type = Type
     Self.Lexeme = Lexeme
-    Self.Line = Line
+    Self.Location = Location
 
     return setmetatable(Self, Token)
 end
 
 Token.Types = {
-    -- Symbols
-    LeftParenthesis = 1,
-    RightParenthesis = 2,
-    LeftBrace = 3,
-    RightBrace = 4,
-    Comma = 5,
-    Dot = 6,
-    Minus = 7,
-    Plus = 8,
-    Semicolon = 9,
-    Slash = 10,
-    Star = 11,
+    -- Character values
+    Hash = string.byte('#'),
+    LeftParenthesis = string.byte('('),
+    RightParenthesis = string.byte(')'),
+    Star = string.byte('*'),
+    Plus = string.byte('+'),
+    Comma = string.byte(','),
+    Minus = string.byte('-'),
+    Dot = string.byte('.'),
+    Slash = string.byte('/'),
+    Less = string.byte('<'),
+    Equals = string.byte('='),
+    Greater = string.byte('>'),
+    LeftBrace = string.byte('{'),
+    RightBrace = string.byte('}'),
 
-    -- Comparison
-    Equals = 12,
-    NotEquals = 13,
-    DoubleEquals = 14,
-    Greater = 15,
-    GreaterEquals = 16,
-    Less = 17,
-    LessEquals = 18,
+    -- Beyond byte values 256+
+    Equal = 256,
+    LessEqual = 257,
+    GreaterEqual = 258,
+    NotEquals = 259,
+    DoubleSlash = 260,
 
     -- Literals
-    Identifier = 19,
-    String = 20,
-    Number = 21,
+    Identifier = 288,
+    String = 289,
+    Number = 290,
 
     -- Keywords
-    Local = 22,
-    Nil = 23,
-    True = 24,
-    False = 25,
-    Not = 26,
-    And = 27,
-    Or = 28,
-    Fun = 29,
-    End = 30,
-    While = 31,
-    Do = 32,
-    If = 33,
-    Then = 34,
-    Else = 35,
-    Type = 36,
-    Return = 37,
+    And = 320,
+    Break = 321,
+    Do = 322,
+    Else = 323,
+    Elseif = 324,
+    End = 325,
+    False = 326,
+    For = 327,
+    Fun = 328,
+    If = 329,
+    In = 330,
+    Nil = 331,
+    Not = 332,
+    Or = 333,
+    Return = 334,
+    Then = 335,
+    True = 336,
+    Type = 337,
+    Var = 338,
+    While = 339,
 }
 
 return Token
