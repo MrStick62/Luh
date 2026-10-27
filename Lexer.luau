@@ -72,7 +72,7 @@ function Lexer.GetCurrentLexeme(Self: Lexer): string
 end
 
 function Lexer.AddToken(Self: Lexer, Type: number)
-    table.insert(Self.Tokens, Token.New(Type, Self:GetCurrentLexeme(), Self.Start))
+    table.insert(Self.Tokens, Token.New(Type, Self:GetCurrentLexeme(), Self.Start, Self.Line))
 end
 
 function Lexer.Consume(Self: Lexer, Count: number?)
@@ -289,26 +289,26 @@ Lexer.ReadChar = {
 } :: { [string] : (Self: Lexer) -> () }
 
 Lexer.Keywords = {
-    And = Token.Types.And,
-    Break = Token.Types.Break,
-    Do = Token.Types.Do,
-    Else = Token.Types.Else,
-    Elseif = Token.Types.Elseif,
-    End = Token.Types.End,
-    False = Token.Types.False,
-    For = Token.Types.For,
-    Fun = Token.Types.Fun,
-    If = Token.Types.If,
-    In = Token.Types.In,
-    Nil = Token.Types.Nil,
-    Not = Token.Types.Not,
-    Or = Token.Types.Or,
-    Return = Token.Types.Return,
-    Then = Token.Types.Then,
-    True = Token.Types.True,
-    Type = Token.Types.Type,
-    Var = Token.Types.Var,
-    While = Token.Types.While,
+    ["and"] = Token.Types.And,
+    ["break"] = Token.Types.Break,
+    ["do"] = Token.Types.Do,
+    ["else"] = Token.Types.Else,
+    ["elseif"] = Token.Types.Elseif,
+    ["end"] = Token.Types.End,
+    ["false"] = Token.Types.False,
+    ["for"] = Token.Types.For,
+    ["fun"] = Token.Types.Fun,
+    ["if"] = Token.Types.If,
+    ["in"] = Token.Types.In,
+    ["nil"] = Token.Types.Nil,
+    ["not"] = Token.Types.Not,
+    ["or"] = Token.Types.Or,
+    ["return"] = Token.Types.Return,
+    ["then"] = Token.Types.Then,
+    ["true"] = Token.Types.True,
+    ["type"] = Token.Types.Type,
+    ["var"] = Token.Types.Var,
+    ["while"] = Token.Types.While,
 }
 
 return Lexer

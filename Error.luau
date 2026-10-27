@@ -27,7 +27,7 @@ function Error.Broadcast(Message: string)
 end
 
 function Error.Report(Line: number, Where: string, Message: string, Severity: number)
-    Error.Broadcast((`[line {Line}] {SeverityText[Severity]}: {Message}`))
+    Error.Broadcast((`[line {Line}] {SeverityText[Severity]}{#Where > 0 and ` {Where}` or ""}: {Message}`))
 
     if Severity == Error.Severity.Halt then
         Error.ShouldHalt = true

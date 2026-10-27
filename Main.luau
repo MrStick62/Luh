@@ -3,8 +3,9 @@
 local Luh = require("./Luh")
 
 local Script = [[
-local short = "bruh"
-local value = x * (5 + 200) / 8.5
+x * (5 + 200) / 8.5
+var short = "bruh"
+var value = x * (5 + 200) / 8.5
 
 <!
 
