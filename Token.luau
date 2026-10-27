@@ -22,8 +22,10 @@ function Token.New(Type: number, Lexeme: string, Location: number): Token
 end
 
 Token.Types = {
+    EOF = 0,
+
     -- Character values
-    Hash = string.byte('#'),
+    Modulo = string.byte('%'),
     LeftParenthesis = string.byte('('),
     RightParenthesis = string.byte(')'),
     Star = string.byte('*'),
@@ -42,8 +44,9 @@ Token.Types = {
     Equal = 256,
     LessEqual = 257,
     GreaterEqual = 258,
-    NotEquals = 259,
-    DoubleSlash = 260,
+    NotEqual = 259,
+    DoublePlus = 260,
+    -- Do NOT add unary double plus or double minus. Adds ambiguity to which statement it belongs to without semicolon for explicit statement end.
 
     -- Literals
     Identifier = 288,

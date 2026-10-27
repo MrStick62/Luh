@@ -37,6 +37,9 @@ function Lexer.ScanTokens(Self: Lexer): { Token }
         Self:ScanToken()
     end
 
+    Self.Start = Self.Current
+    Self:AddToken(Token.Types.EOF)
+
     return Self.Tokens
 end
 
@@ -72,8 +75,8 @@ function Lexer.AddToken(Self: Lexer, Type: number)
     table.insert(Self.Tokens, Token.New(Type, Self:GetCurrentLexeme(), Self.Start))
 end
 
-function Lexer.Consume(Self: Lexer)
-    Self.Current += 1
+function Lexer.Consume(Self: Lexer, Count: number?)
+    Self.Current += Count or 1
 end
 
 function Lexer.AddLine(Self: Lexer)
@@ -81,12 +84,16 @@ function Lexer.AddLine(Self: Lexer)
 end
 
 function Lexer.PeekChar(Self: Lexer, Offset: number?): string
+    if Self:IsAtEnd(Offset) then
+        return '\0'
+    end
+
     local Index = Self.Current + (Offset or 0)
     return Self.Source:sub(Index, Index)
 end
 
-function Lexer.IsAtEnd(Self: Lexer)
-    return Self.Current > #Self.Source
+function Lexer.IsAtEnd(Self: Lexer, Offset: number?)
+    return Self.Current + (Offset or 0) > #Self.Source
 end
 
 function Lexer.IsDigit(Self: Lexer, Char: string): boolean
@@ -127,7 +134,7 @@ function Lexer.ReadIdentifier(Self: Lexer)
 end
 
 Lexer.ReadChar = {
-    ['#'] = function(Self: Lexer)
+    ['!'] = function(Self: Lexer)
         while Self:PeekChar() ~= '\n' and not Self:IsAtEnd() do
             Self:Consume()
         end
@@ -162,6 +169,13 @@ Lexer.ReadChar = {
     end,
     ['+'] = function(Self: Lexer) 
         Self:Consume()
+
+        if Self:PeekChar() == '+' then
+            Self:Consume()
+            Self:AddToken(Token.Types.DoublePlus)
+            return
+        end
+
         Self:AddToken(Token.Types.Plus)
     end,
     ['*'] = function(Self: Lexer) 
@@ -170,14 +184,11 @@ Lexer.ReadChar = {
     end,
     ['/'] = function(Self: Lexer)
         Self:Consume()
-
-        if Self:PeekChar() == '/' then
-            Self:Consume()
-            Self:AddToken(Token.Types.DoubleSlash)
-            return
-        end
-
         Self:AddToken(Token.Types.Slash)
+    end,
+    ['%'] = function(Self: Lexer)
+        Self:Consume()
+        Self:AddToken(Token.Types.Modulo)
     end,
     ['='] = function(Self: Lexer) 
         Self:Consume()
@@ -195,7 +206,7 @@ Lexer.ReadChar = {
 
         if Self:PeekChar() == '=' then
             Self:Consume()
-            Self:AddToken(Token.Types.NotEquals)
+            Self:AddToken(Token.Types.NotEqual)
             return
         end
 
@@ -205,7 +216,7 @@ Lexer.ReadChar = {
     ['>'] = function(Self: Lexer)
         Self:Consume()
 
-        if Self:PeekChar() == "=" then
+        if Self:PeekChar() == '=' then
             Self:Consume()
             Self:AddToken(Token.Types.GreaterEqual)
             return
@@ -216,9 +227,30 @@ Lexer.ReadChar = {
     ['<'] = function(Self: Lexer)
         Self:Consume()
 
-        if Self:PeekChar() == "=" then
+        if Self:PeekChar() == '=' then
             Self:Consume()
             Self:AddToken(Token.Types.LessEqual)
+            return
+        end
+
+        if Self:PeekChar() == '!' then
+            local Nest = 1
+
+            while Nest > 0 do 
+                if Self:PeekChar() == '<' and Self:PeekChar() == '!' then
+                    Nest += 1
+                elseif Self:PeekChar() == '!' and Self:PeekChar(1) == '>' then
+                    Nest -= 1
+                end
+
+                if Self:PeekChar() == '\n' then
+                    Self:AddLine()
+                end
+                
+                Self:Consume()
+            end
+
+            Self:Consume(2)
             return
         end
 
@@ -253,7 +285,7 @@ Lexer.ReadChar = {
     ['\n'] = function(Self: Lexer)
         Self:Consume()
         Self:AddLine()
-    end
+    end,
 } :: { [string] : (Self: Lexer) -> () }
 
 Lexer.Keywords = {
