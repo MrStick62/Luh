@@ -70,11 +70,17 @@ function Parser.Match(Self: Parser, ...: number): boolean
 end
 
 function Parser.Parse(Self: Parser): Expression
-    return Self:ParseExpression()
+    return Self:ParseCommaExpression()
 end
 
-function Parser.ParseExpressionList(Self: Parser): Expression
+function Parser.ParseCommaExpression(Self: Parser): Expression
     local Expression = Self:ParseExpression()
+
+    while Self:Match(Token.Types.Comma) do
+        local Operator = Self:Advance()
+        local Right = Self:ParseExpression()
+        Expression = Ast.BinaryExpression(Expression, Operator, Right)
+    end
 
     return Expression
 end
@@ -167,7 +173,7 @@ end
 function Parser.ParsePrimary(Self: Parser): Expression
     if Self:Match(Token.Types.LeftParenthesis) then
         Self:Advance()
-        local Expression = Self:ParseExpression()
+        local Expression = Self:ParseCommaExpression()
 
         local Close = Self:PeekToken()
         if Close.Type == Token.Types.RightParenthesis then

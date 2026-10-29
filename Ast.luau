@@ -6,7 +6,7 @@ type Token = Token.Token
 local Ast = {}
 Ast.__index = {}
 
-export type BinaryOperator = "+" | "-" | "*" | "/" | "//" | "==" | "~=" | "<" | "<=" | ">" | ">=" | "and" | "or"
+export type BinaryOperator = "+" | "-" | "*" | "/" | "//" | "==" | "~=" | "<" | "<=" | ">" | ">=" | "and" | "or" | ","
 export type UnaryOperator = "not" | "+" | "-"
 
 export type AstType = "BinaryExpression" | "UnaryExpression"
@@ -15,10 +15,8 @@ type AstData = {
     Type: AstType,
 }
 
-export type Ast = typeof(setmetatable({} :: AstData, Ast))
-
 export type LiteralExpression = {
-    Type: "Literal",
+    Type: "LiteralExpression",
     Value: Token,
 }
 
@@ -36,11 +34,12 @@ export type UnaryExpression = {
 }
 
 export type Expression = LiteralExpression | BinaryExpression | UnaryExpression
+export type Ast = Expression
 
 function Ast.LiteralExpression(Value: Token): LiteralExpression
     local Self = {} :: LiteralExpression
 
-    Self.Type = "Literal"
+    Self.Type = "LiteralExpression"
     Self.Value = Value
 
     return Self
