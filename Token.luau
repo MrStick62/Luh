@@ -47,7 +47,7 @@ Token.Types = {
     LessEqual = 257,
     GreaterEqual = 258,
     NotEqual = 259,
-    DoublePlus = 260,
+    DoubleSlash = 260,
     -- Do NOT add unary double plus or double minus. Adds ambiguity to which statement it belongs to without semicolon for explicit statement end.
 
     -- Literals

@@ -169,13 +169,6 @@ Lexer.ReadChar = {
     end,
     ['+'] = function(Self: Lexer) 
         Self:Consume()
-
-        if Self:PeekChar() == '+' then
-            Self:Consume()
-            Self:AddToken(Token.Types.DoublePlus)
-            return
-        end
-
         Self:AddToken(Token.Types.Plus)
     end,
     ['*'] = function(Self: Lexer) 
@@ -184,6 +177,13 @@ Lexer.ReadChar = {
     end,
     ['/'] = function(Self: Lexer)
         Self:Consume()
+
+        if Self:PeekChar() == '/' then
+            Self:Consume()
+            Self:AddToken(Token.Types.DoubleSlash)
+            return
+        end
+
         Self:AddToken(Token.Types.Slash)
     end,
     ['%'] = function(Self: Lexer)

@@ -152,7 +152,7 @@ end
 function Parser.ParseFactor(Self: Parser): Expression
     local Expression = Self:ParseUnary()
     
-    while Self:Match(Token.Types.Star, Token.Types.Slash, Token.Types.Modulo) do
+    while Self:Match(Token.Types.Star, Token.Types.Slash, Token.Types.DoubleSlash, Token.Types.Modulo) do
         local Operator = Self:Advance()
         local Right = Self:ParseUnary()
         Expression = Ast.BinaryExpression(Expression, Operator, Right)
@@ -185,7 +185,7 @@ function Parser.ParsePrimary(Self: Parser): Expression
         return Expression
     end
 
-    if not Self:Match(Token.Types.Identifier, Token.Types.Number, Token.Types.String, Token.Types.Nil) then
+    if not Self:Match(Token.Types.Identifier, Token.Types.Number, Token.Types.String, Token.Types.Nil, Token.Types.True, Token.Types.False) then
         Self.Error(Self:PeekToken(), "Expected expression.")
     end
 

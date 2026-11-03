@@ -6,9 +6,6 @@ type Token = Token.Token
 local Ast = {}
 Ast.__index = {}
 
-export type BinaryOperator = "+" | "-" | "*" | "/" | "//" | "==" | "~=" | "<" | "<=" | ">" | ">=" | "and" | "or" | ","
-export type UnaryOperator = "not" | "+" | "-"
-
 export type AstType = "BinaryExpression" | "UnaryExpression"
 
 type AstData = {
