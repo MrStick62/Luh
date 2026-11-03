@@ -1,6 +1,10 @@
 --!strict
 
 local Error = require("./Error")
+
+local Location = require("./Location")
+type Location = Location.Location
+
 local Token = require("./Token")
 type Token = Token.Token
 
@@ -14,6 +18,7 @@ type LexerData = {
     Start: number,
     Current: number,
     Line: number,
+    LineStart: number,
 }
 
 export type Lexer = typeof(setmetatable({} :: LexerData, Lexer))
@@ -26,7 +31,8 @@ function Lexer.New(Source: string): Lexer
 
     Self.Start = 1
     Self.Current = 1
-    Self.Line = 2
+    Self.Line = 1
+    Self.LineStart = Self.Start
 
     return setmetatable(Self, Lexer)
 end
@@ -63,7 +69,7 @@ function Lexer.ScanToken(Self: Lexer)
         return
     end
 
-    Error.Report(Self.Line, "", `Unexpected character '{Char}'`, Error.Severity.Halt)
+    Error.Report(Self:GetCurrentLocation(), `Unexpected character '{Char}'`, Error.Type.Lexer)
     Self:Consume()
 end
 
@@ -71,8 +77,12 @@ function Lexer.GetCurrentLexeme(Self: Lexer): string
     return Self.Source:sub(Self.Start, Self.Current - 1)
 end
 
+function Lexer.GetCurrentLocation(Self: Lexer): Location
+    return Location.New(Self.Line, Self.Start - Self.LineStart, Self.Current - Self.Start)
+end
+
 function Lexer.AddToken(Self: Lexer, Type: number)
-    table.insert(Self.Tokens, Token.New(Type, Self:GetCurrentLexeme(), Self.Start, Self.Line))
+    table.insert(Self.Tokens, Token.New(Type, Self:GetCurrentLexeme(), Self:GetCurrentLocation()))
 end
 
 function Lexer.Consume(Self: Lexer, Count: number?)
@@ -81,6 +91,7 @@ end
 
 function Lexer.AddLine(Self: Lexer)
     Self.Line += 1
+    Self.LineStart = Self.Current
 end
 
 function Lexer.PeekChar(Self: Lexer, Offset: number?): string
@@ -211,7 +222,7 @@ Lexer.ReadChar = {
         end
 
         local Char = Self.Source:sub(Self.Current, Self.Current)
-        Error.Report(Self.Line, "", `Expected '=' to follow '~', but got '{Char}'`, Error.Severity.Halt)
+        Error.Report(Self:GetCurrentLocation(), `Expected '=' to follow '~', but got '{Char}'`, Error.Type.Lexer)
     end,
     ['>'] = function(Self: Lexer)
         Self:Consume()
@@ -264,7 +275,7 @@ Lexer.ReadChar = {
         end
 
         if Self:IsAtEnd() then
-            Error.Report(Self.Line, "", "Unterminated string", Error.Severity.Halt)
+            Error.Report(Self:GetCurrentLocation(), "Unterminated string", Error.Type.Lexer)
             return
         end
 

@@ -1,24 +1,25 @@
 --!strict
 
+local Location = require("./Location")
+type Location = Location.Location
+
 local Token = {}
 Token.__index = Token
 
 type TokenData = {
     Type: number,
     Lexeme: string,
-    Location: number,
-    Line: number,
+    Location: Location,
 }
 
 export type Token = typeof(setmetatable({} :: TokenData, Token))
 
-function Token.New(Type: number, Lexeme: string, Location: number, Line: number): Token
+function Token.New(Type: number, Lexeme: string, Location: Location): Token
     local Self = {}
 
     Self.Type = Type
     Self.Lexeme = Lexeme
     Self.Location = Location
-    Self.Line = Line
 
     return setmetatable(Self, Token)
 end

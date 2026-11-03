@@ -1,37 +1,40 @@
 --!strict
 
+local Location = require("./Location")
+type Location = Location.Location
+
 local Error = {}
 
 local Listeners = {}
 
 Error.ShouldHalt = false
 
-Error.Severity = {
-    Warning = 1,
-    Halt = 2,
+Error.Type = {
+    Lexer = 1,
+    Syntax = 2,
+    Runtime = 3,
 }
 
-local SeverityText = {
-    [Error.Severity.Warning] = "Warning",
-    [Error.Severity.Halt] = "Error",
+local TypeText = {
+    [Error.Type.Lexer] = "Lexer",
+    [Error.Type.Syntax] = "Syntax",
+    [Error.Type.Runtime] = "Runtime",
 }
 
-function Error.Listen(Function: (Message: string) -> ())
+function Error.Listen(Function: (Location: Location, Message: string) -> ())
     table.insert(Listeners, Function)
 end
 
-function Error.Broadcast(Message: string)
+function Error.Broadcast(Location: Location, Message: string)
     for _, Listener in Listeners do
-        Listener(Message)
+        Listener(Location, Message)
     end
 end
 
-function Error.Report(Line: number, Where: string, Message: string, Severity: number)
-    Error.Broadcast((`[line {Line}] {SeverityText[Severity]}{#Where > 0 and ` {Where}` or ""}: {Message}`))
+function Error.Report(Location: Location, Message: string, Type: number)
+    Error.Broadcast(Location, `[line {Location.Line}] {TypeText[Type]} Error: {Message}`)
 
-    if Severity == Error.Severity.Halt then
-        Error.ShouldHalt = true
-    end
+    Error.ShouldHalt = true
 end
 
 return Error

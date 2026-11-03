@@ -28,9 +28,9 @@ end
 
 function Parser.Error(Token: Token, Message: string)
     if Token.Type == Token.Types.EOF then
-        Error.Report(Token.Line, "at end", Message, Error.Severity.Halt)
+        Error.Report(Token.Location, Message, Error.Type.Syntax)
     else
-        Error.Report(Token.Line, `at '{Token.Lexeme}'`, Message, Error.Severity.Halt)
+        Error.Report(Token.Location, Message, Error.Type.Syntax)
     end
 end
 

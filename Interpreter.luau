@@ -12,7 +12,38 @@ type BinaryExpression = Ast.BinaryExpression
 type Expression = Ast.Expression
 type Ast = Ast.Ast
 
+type RuntimeError = {
+    Token: Token,
+    Message: string,
+}
+
 local Interpreter = {}
+
+function Interpreter.Run(Expression: Expression)
+    local Result = nil
+
+    local Ok, Err: RuntimeError = xpcall(
+        function()
+            Result = Interpreter.EvaluateExpression(Expression)
+        end,
+        function(Err: RuntimeError): RuntimeError
+            return Err
+        end)
+
+    if not Ok then
+        Error.Report(Err.Token.Location, Err.Message, Error.Type.Runtime)
+        return
+    end
+
+    print(`{tonumber(Result)}`)
+end
+
+function Interpreter.Error(Token: Token, Message: string): ()
+    error({
+        Token = Token,
+        Message = Message,
+    }, 0)
+end
 
 function Interpreter.EvaluateExpression(Expression: Expression): any
     local Function = Interpreter.ExpressionMap[Expression.Type]
@@ -21,7 +52,7 @@ end
 
 function Interpreter.EvaluateBinary(Expression: BinaryExpression): any
     local BinaryFunction = Interpreter.BinaryFunctions[Expression.Operator.Type]
-    local Left, Right = Interpreter.EvaluateExpression(Expression.Left), Interpreter.EvaluateExpression(Expression.Left)
+    local Left, Right = Interpreter.EvaluateExpression(Expression.Left), Interpreter.EvaluateExpression(Expression.Right)
     return BinaryFunction and BinaryFunction(Expression.Operator, Left, Right)
 end
 
@@ -42,7 +73,7 @@ Interpreter.BinaryFunctions = {
             return Left + Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to add {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.Minus] = function(Operator: Token, Left: any, Right: any): any
@@ -51,7 +82,7 @@ Interpreter.BinaryFunctions = {
             return Left - Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to subtract {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.Star] = function(Operator: Token, Left: any, Right: any): any
@@ -60,7 +91,7 @@ Interpreter.BinaryFunctions = {
             return Left * Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to multiply {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.Slash] = function(Operator: Token, Left: any, Right: any): any
@@ -69,7 +100,7 @@ Interpreter.BinaryFunctions = {
             return Left / Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to divide {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.DoubleSlash] = function(Operator: Token, Left: any, Right: any): any
@@ -78,7 +109,7 @@ Interpreter.BinaryFunctions = {
             return Left // Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to divide {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.Modulo] = function(Operator: Token, Left: any, Right: any): any
@@ -87,7 +118,7 @@ Interpreter.BinaryFunctions = {
             return Left % Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to divide {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.And] = function(Operator: Token, Left: any, Right: any): any
@@ -108,7 +139,7 @@ Interpreter.BinaryFunctions = {
             return Left > Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to compare {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.GreaterEqual] = function(Operator: Token, Left, Right: any): any
@@ -117,7 +148,7 @@ Interpreter.BinaryFunctions = {
             return Left >= Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to compare {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.Less] = function(Operator: Token, Left, Right: any): any
@@ -126,7 +157,7 @@ Interpreter.BinaryFunctions = {
             return Left < Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to compare {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.LessEqual] = function(Operator: Token, Left, Right: any): any
@@ -135,7 +166,7 @@ Interpreter.BinaryFunctions = {
             return Left <= Right
         end
 
-        Error.Report(Operator.Line, "", `Attempt to compare {LeftType} and {RightType}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}.`)
         return nil
     end,
 } :: { [number]: (Operator: Token, Left: any, Right: any) -> any }
@@ -147,7 +178,7 @@ Interpreter.UnaryFunctions = {
             return Value
         end
 
-        Error.Report(Operator.Line, "", `Attempt to use unary '+' on {typeof(Value)}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to use unary '+' on {typeof(Value)}.`)
         return nil
     end,
     [Token.Types.Minus] = function(Operator: Token, Value: any): any
@@ -156,7 +187,7 @@ Interpreter.UnaryFunctions = {
             return -Value
         end
 
-        Error.Report(Operator.Line, "", `Attempt to use unary '-' on {typeof(Value)}`, Error.Severity.Halt)
+        Interpreter.Error(Operator, `Attempt to use unary '-' on {typeof(Value)}.`)
         return nil
     end,
     [Token.Types.Not] = function(Operator: Token, Value: any): any
@@ -166,7 +197,7 @@ Interpreter.UnaryFunctions = {
 
 Interpreter.LiteralEvaluations = {
     [Token.Types.Number] = function(Lexeme: string): any
-        return tonumber(Token)
+        return tonumber(Lexeme)
     end,
     [Token.Types.Identifier] = function(Lexeme: string): any
         return
