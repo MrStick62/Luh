@@ -43,7 +43,8 @@ function Luh.Run(Source: string)
         return
     end
 
-    Interpreter.Run(Expression)
+    local TreeInterpreter = Interpreter.New()
+    TreeInterpreter:Run(Expression)
 end
 
 return Luh

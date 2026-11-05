@@ -6,6 +6,7 @@ type Token = Token.Token
 
 local Ast = require("./Ast")
 type Expression = Ast.Expression
+type Statement = Ast.Statement
 
 local Parser = {}
 Parser.__index = Parser
@@ -69,10 +70,42 @@ function Parser.Match(Self: Parser, ...: number): boolean
     return false
 end
 
-function Parser.Parse(Self: Parser): Expression
-    return Self:ParseCommaExpression()
+function Parser.Parse(Self: Parser): { Statement }
+    local Statements = {}
+
+    while not Self:IsAtEnd() do
+        table.insert(Statements, Self:ParseStatement())
+    end
+
+    return Statements
 end
 
+function Parser.ParseStatement(Self: Parser): Statement
+    if Self:Match(Token.Types.Var) then
+        Self:Advance()
+        return Parser.ParseVar(Self)
+    end
+
+    return Ast.ExpressionStatement(Self:ParseExpression())
+end
+
+function Parser.ParseVar(Self: Parser): Statement
+    local Identifier = Self:Advance()
+    if Identifier.Type ~= Token.Types.Identifier then
+        Parser.Error(Identifier, `Expected identifier, got '{Identifier.Lexeme}'`)
+    end
+
+    local Initializer = nil
+    if Self:Match(Token.Types.Equals) then
+        Self:Advance()
+
+        Initializer = Self:ParseExpression()
+    end
+
+    return Ast.VariableStatement(Identifier, Initializer)
+end
+
+--[[
 function Parser.ParseCommaExpression(Self: Parser): Expression
     local Expression = Self:ParseExpression()
 
@@ -84,6 +117,7 @@ function Parser.ParseCommaExpression(Self: Parser): Expression
 
     return Expression
 end
+]]
 
 function Parser.ParseExpression(Self: Parser): Expression
     return Self:ParseOr()
@@ -173,7 +207,8 @@ end
 function Parser.ParsePrimary(Self: Parser): Expression
     if Self:Match(Token.Types.LeftParenthesis) then
         Self:Advance()
-        local Expression = Self:ParseCommaExpression()
+        --local Expression = Self:ParseCommaExpression()
+        local Expression = Self:ParseExpression()
 
         local Close = Self:PeekToken()
         if Close.Type == Token.Types.RightParenthesis then
@@ -186,7 +221,7 @@ function Parser.ParsePrimary(Self: Parser): Expression
     end
 
     if not Self:Match(Token.Types.Identifier, Token.Types.Number, Token.Types.String, Token.Types.Nil, Token.Types.True, Token.Types.False) then
-        Self.Error(Self:PeekToken(), "Expected expression.")
+        Parser.Error(Self:PeekToken(), `Expected expression, got '{Self:PeekToken().Lexeme}'.`)
     end
 
     return Ast.LiteralExpression(Self:Advance())

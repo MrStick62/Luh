@@ -1,3 +1,5 @@
+--!strict
+
 local Location = {}
 Location.__index = Location
 

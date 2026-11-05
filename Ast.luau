@@ -31,6 +31,20 @@ export type UnaryExpression = {
 }
 
 export type Expression = LiteralExpression | BinaryExpression | UnaryExpression
+
+export type ExpressionStatement = {
+    Type: "ExpressionStatement",
+    Expression: Expression,
+}
+
+export type VariableStatement = {
+    Type: "VariableStatement",
+    Identifier: Token,
+    Initializer: Expression?,
+}
+
+export type Statement = ExpressionStatement | VariableStatement
+
 export type Ast = Expression
 
 function Ast.LiteralExpression(Value: Token): LiteralExpression
@@ -59,6 +73,25 @@ function Ast.UnaryExpression(Operator: Token, Expression: Expression): UnaryExpr
     Self.Type = "UnaryExpression"
     Self.Operator = Operator
     Self.Expression = Expression
+
+    return Self
+end
+
+function Ast.ExpressionStatement(Expression: Expression): ExpressionStatement
+    local Self = {} :: ExpressionStatement
+
+    Self.Type = "ExpressionStatement"
+    Self.Expression = Expression
+
+    return Self
+end
+
+function Ast.VariableStatement(Identifier: Token, Initializer: Expression?): VariableStatement
+    local Self = {} :: VariableStatement
+
+    Self.Type = "VariableStatement"
+    Self.Identifier = Identifier
+    Self.Initializer = Initializer
 
     return Self
 end

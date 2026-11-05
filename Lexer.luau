@@ -248,9 +248,11 @@ Lexer.ReadChar = {
             local Nest = 1
 
             while Nest > 0 do 
-                if Self:PeekChar() == '<' and Self:PeekChar() == '!' then
+                if Self:PeekChar() == '<' and Self:PeekChar(1) == '!' then
+                    Self:Consume()
                     Nest += 1
                 elseif Self:PeekChar() == '!' and Self:PeekChar(1) == '>' then
+                    Self:Consume()
                     Nest -= 1
                 end
 
@@ -260,8 +262,6 @@ Lexer.ReadChar = {
                 
                 Self:Consume()
             end
-
-            Self:Consume(2)
             return
         end
 
