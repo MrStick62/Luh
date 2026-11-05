@@ -172,25 +172,64 @@ Lexer.ReadChar = {
     end,
     ['.'] = function(Self: Lexer) 
         Self:Consume()
+
+        if Self:PeekChar()  == '.' then
+            Self:Consume()
+            Self:AddToken(Token.Types.DoubleDot)
+            return
+        end
+
         Self:AddToken(Token.Types.Dot)
-    end,
-    ['-'] = function(Self: Lexer) 
-        Self:Consume()
-        Self:AddToken(Token.Types.Minus)
     end,
     ['+'] = function(Self: Lexer) 
         Self:Consume()
+
+        if Self:PeekChar() == '=' then
+            Self:Consume()
+            Self:AddToken(Token.Types.PlusEquals)
+            return
+        end
+
         Self:AddToken(Token.Types.Plus)
+    end,
+    ['-'] = function(Self: Lexer) 
+        Self:Consume()
+
+        if Self:PeekChar() == '=' then
+            Self:Consume()
+            Self:AddToken(Token.Types.MinusEquals)
+            return
+        end
+
+        Self:AddToken(Token.Types.Minus)
     end,
     ['*'] = function(Self: Lexer) 
         Self:Consume()
+
+        if Self:PeekChar() == '=' then
+            Self:Consume()
+            Self:AddToken(Token.Types.StarEquals)
+            return
+        end
+
         Self:AddToken(Token.Types.Star)
     end,
     ['/'] = function(Self: Lexer)
         Self:Consume()
 
-        if Self:PeekChar() == '/' then
+        if Self:PeekChar() == '=' then
             Self:Consume()
+            Self:AddToken(Token.Types.SlashEquals)
+            return
+        elseif Self:PeekChar() == '/' then
+            Self:Consume()
+
+            if Self:PeekChar() == '=' then
+                Self:Consume()
+                Self:AddToken(Token.Types.DoubleSlashEquals)
+                return
+            end
+
             Self:AddToken(Token.Types.DoubleSlash)
             return
         end
@@ -199,7 +238,25 @@ Lexer.ReadChar = {
     end,
     ['%'] = function(Self: Lexer)
         Self:Consume()
+
+        if Self:PeekChar() == '=' then
+            Self:Consume()
+            Self:AddToken(Token.Types.ModuloEquals)
+            return
+        end
+
         Self:AddToken(Token.Types.Modulo)
+    end,
+    ['^'] = function(Self: Lexer)
+        Self:Consume()
+
+        if Self:PeekChar() == '=' then
+            Self:Consume()
+            Self:AddToken(Token.Types.KaratEquals)
+            return
+        end
+
+        Self:AddToken(Token.Types.Karat)
     end,
     ['='] = function(Self: Lexer) 
         Self:Consume()

@@ -3,8 +3,11 @@
 local Luh = require("./Luh")
 
 local Script = [[
-var poop = 123
-poop or (5 + 200) / 8.5
+var str = "Hello, "
+str .. "World!"
+var num = 3 .. 2
+(-num ^ 2)
+num or (5 + 200) / 8.5
 2 * (5 + 200) / 8.5
 ]]
 

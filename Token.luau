@@ -40,6 +40,7 @@ Token.Types = {
     Less = string.byte('<'),
     Equals = string.byte('='),
     Greater = string.byte('>'),
+    Karat = string.byte('^'),
     LeftBrace = string.byte('{'),
     RightBrace = string.byte('}'),
 
@@ -49,7 +50,14 @@ Token.Types = {
     GreaterEqual = 258,
     NotEqual = 259,
     DoubleSlash = 260,
-    -- Do NOT add unary double plus or double minus. Adds ambiguity to which statement it belongs to without semicolon for explicit statement end.
+    DoubleDot = 261,
+    PlusEquals = 262,
+    MinusEquals = 263,
+    StarEquals = 264,
+    SlashEquals = 265,
+    DoubleSlashEquals = 266,
+    ModuloEquals = 267,
+    KaratEquals = 268,
 
     -- Literals
     Identifier = 288,

@@ -120,7 +120,23 @@ end
 ]]
 
 function Parser.ParseExpression(Self: Parser): Expression
-    return Self:ParseOr()
+    return Self:ParseAssignmentExpression()
+end
+
+function Parser.ParseAssignmentExpression(Self: Parser): Expression
+    local Expression = Self:ParseOr()
+
+    if Expression.Type == "LiteralExpression" and Expression.Value.Type == Token.Types.Identifier then
+        while Self:Match(Token.Types.Equals, Token.Types.PlusEquals, Token.Types.MinusEquals, Token.Types.StarEquals, 
+                Token.Types.SlashEquals, Token.Types.DoubleSlashEquals, Token.Types.ModuloEquals, Token.Types.KaratEquals) do
+
+            local Operator = Self:Advance()
+            local Right = Self:ParseOr()
+            Expression = Ast.AssignmentExpression(Expression.Value, Operator, Right)
+        end
+    end
+
+    return Expression
 end
 
 function Parser.ParseOr(Self: Parser): Expression
@@ -160,9 +176,21 @@ function Parser.ParseEquality(Self: Parser): Expression
 end
 
 function Parser.ParseComparison(Self: Parser): Expression
-    local Expression = Self:ParseTerm()
+    local Expression = Self:ParseConcatenation()
 
     while Self:Match(Token.Types.Greater, Token.Types.GreaterEqual, Token.Types.Less, Token.Types.LessEqual) do
+        local Operator = Self:Advance()
+        local Right = Self:ParseConcatenation()
+        Expression = Ast.BinaryExpression(Expression, Operator, Right)
+    end
+
+    return Expression
+end
+
+function Parser.ParseConcatenation(Self: Parser): Expression
+    local Expression = Self:ParseTerm()
+
+    while Self:Match(Token.Types.DoubleDot) do
         local Operator = Self:Advance()
         local Right = Self:ParseTerm()
         Expression = Ast.BinaryExpression(Expression, Operator, Right)
@@ -201,7 +229,19 @@ function Parser.ParseUnary(Self: Parser): Expression
         return Ast.UnaryExpression(Operator, Self:ParseUnary())
     end
 
-    return Self:ParsePrimary()
+    return Self:ParseExponent()
+end
+
+function Parser.ParseExponent(Self: Parser): Expression
+    local Expression = Self:ParsePrimary()
+
+    while Self:Match(Token.Types.Karat) do
+        local Operator = Self:Advance()
+        local Right = Self:ParsePrimary()
+        Expression = Ast.BinaryExpression(Expression, Operator, Right)
+    end
+
+    return Expression
 end
 
 function Parser.ParsePrimary(Self: Parser): Expression

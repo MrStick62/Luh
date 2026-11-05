@@ -41,7 +41,7 @@ function Interpreter.New(): Interpreter
 end
 
 function Interpreter.Run(Self: Interpreter, Statements: { Statement })
-    local Ok, Err: RuntimeError = xpcall(
+    local Ok, Err = xpcall(
         function()
             for _, Statement in Statements do
                 Self:EvaluateStatement(Statement)
@@ -178,6 +178,28 @@ Interpreter.BinaryFunctions = {
         end
 
         Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}.`)
+        return nil
+    end,
+    [Token.Types.Karat] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(RightExpr)
+
+        local LeftType, RightType = typeof(Left), typeof(Right)
+        if LeftType == "number" and RightType == "number" then
+            return Left ^ Right
+        end
+
+        Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}.`)
+        return nil
+    end,
+    [Token.Types.DoubleDot] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(RightExpr)
+
+        local LeftType, RightType = typeof(Left), typeof(Right)
+        if LeftType == "string" and RightType == "string" then
+            return Left .. Right
+        end
+
+         Interpreter.Error(Operator, `Attempt to concatenate {LeftType} and {RightType}.`)
         return nil
     end,
     [Token.Types.And] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any

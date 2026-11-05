@@ -30,7 +30,14 @@ export type UnaryExpression = {
     Expression: Expression,
 }
 
-export type Expression = LiteralExpression | BinaryExpression | UnaryExpression
+export type AssignmentExpression = {
+    Type: "AssignmentExpression",
+    Identifier: Token,
+    Operator: Token,
+    Expression: Expression,
+}
+
+export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression
 
 export type ExpressionStatement = {
     Type: "ExpressionStatement",
@@ -71,6 +78,17 @@ function Ast.UnaryExpression(Operator: Token, Expression: Expression): UnaryExpr
     local Self = {} :: UnaryExpression
     
     Self.Type = "UnaryExpression"
+    Self.Operator = Operator
+    Self.Expression = Expression
+
+    return Self
+end
+
+function Ast.AssignmentExpression(Identifier: Token, Operator: Token, Expression: Expression): AssignmentExpression
+    local Self = {} :: AssignmentExpression
+
+    Self.Type = "AssignmentExpression"
+    Self.Identifier = Identifier
     Self.Operator = Operator
     Self.Expression = Expression
 
