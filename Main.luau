@@ -5,7 +5,7 @@ local Luh = require("./Luh")
 local Script = [[
 var str = "Hello, "
 str .. "World!"
-var num = 3 .. 2
+var num = 3
 (-num ^ 2)
 num or (5 + 200) / 8.5
 2 * (5 + 200) / 8.5
