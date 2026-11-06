@@ -299,8 +299,7 @@ Interpreter.UnaryFunctions = {
 
 Interpreter.AssignmentFunctions = {
     [Token.Types.Equals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if Self.Environment.Values[Identifier.Lexeme] then
-            Self.Environment.Values[Identifier.Lexeme] = Value
+        if Self.Environment:Assign(Identifier.Lexeme, Value) then
             return Value
         end
 
@@ -308,109 +307,95 @@ Interpreter.AssignmentFunctions = {
         return nil
     end,
     [Token.Types.PlusEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] += Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left + Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
     [Token.Types.MinusEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] -= Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left - Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
     [Token.Types.StarEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] *= Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left * Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
     [Token.Types.SlashEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] /= Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left / Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
     [Token.Types.DoubleSlashEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] //= Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left // Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
     [Token.Types.ModuloEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)
+            Interpreter.Error(Operator, `Attempt to calculate the remainder of {LeftType} and {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] %= Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left % Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
     [Token.Types.KaratEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if not Self.Environment.Values[Identifier.Lexeme] then
-            Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-            return nil
-        end
+        local Left = Self.Environment:Get(Identifier.Lexeme)
 
-        local LeftType, RightType = typeof(Self.Environment.Values[Identifier.Lexeme]), typeof(Value)
+        local LeftType, RightType = typeof(Left), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
             return nil
         end
         
-        Self.Environment.Values[Identifier.Lexeme] ^= Value
-        return Self.Environment.Values[Identifier.Lexeme]
+        local Result = Left ^ Value
+        Self.Environment:Assign(Identifier.Lexeme, Result)
+        return Result
     end,
 } :: { [number]: (Self: Interpreter, Identifier: Token, Operator: Token, Value: any) -> any }
 

@@ -50,7 +50,12 @@ export type VariableStatement = {
     Initializer: Expression?,
 }
 
-export type Statement = ExpressionStatement | VariableStatement
+export type DoStatement = {
+    Type: "DoStatement",
+    Statements: { Statement },
+}
+
+export type Statement = ExpressionStatement | VariableStatement | DoStatement
 
 export type Ast = Expression
 
@@ -110,6 +115,15 @@ function Ast.VariableStatement(Identifier: Token, Initializer: Expression?): Var
     Self.Type = "VariableStatement"
     Self.Identifier = Identifier
     Self.Initializer = Initializer
+
+    return Self
+end
+
+function Ast.DoStatement(Statements: { Statement }): DoStatement
+    local Self = {} :: DoStatement
+
+    Self.Type = "DoStatement"
+    Self.Statements = Statements
 
     return Self
 end

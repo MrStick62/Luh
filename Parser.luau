@@ -35,8 +35,8 @@ function Parser.Error(Token: Token, Message: string)
     end
 end
 
-function Parser.IsAtEnd(Self: Parser, Offset: number?): boolean
-    return Self:PeekToken().Type == Token.Types.EOF
+function Parser.IsAtEnd(Self: Parser): boolean
+    return if Self:PeekToken() then false else true
 end
 
 function Parser.Advance(Self: Parser): Token
@@ -52,15 +52,11 @@ function Parser.PreviousToken(Self: Parser): Token
     return Self.Tokens[Self.Current - 1]
 end
 
-function Parser.Check(Self: Parser, Type: number): boolean
+function Parser.Match(Self: Parser, ...: number): boolean
     if Self:IsAtEnd() then
         return false
     end
 
-    return Self.Tokens[Self.Current].Type == Type
-end
-
-function Parser.Match(Self: Parser, ...: number): boolean
     for _, Type in {...} do
         if Self:PeekToken().Type == Type then
             return true
@@ -86,6 +82,11 @@ function Parser.ParseStatement(Self: Parser): Statement
         return Parser.ParseVar(Self)
     end
 
+    if Self:Match(Token.Types.Do) then
+        Self:Advance()
+        return Parser.ParseDo(Self)
+    end
+
     return Ast.ExpressionStatement(Self:ParseExpression())
 end
 
@@ -103,6 +104,20 @@ function Parser.ParseVar(Self: Parser): Statement
     end
 
     return Ast.VariableStatement(Identifier, Initializer)
+end
+
+function Parser.ParseDo(Self: Parser): Statement
+    local Statements = {}
+
+    while not Self:Match(Token.Types.Do) and not Self:IsAtEnd() do
+        table.insert(Statements, Self:ParseStatement())
+    end
+
+    if not Self:Match(Token.Types.Do) then
+        --Parser.Error(Token, Message)
+    end
+
+    return Ast.DoStatement(Statements)
 end
 
 --[[
@@ -277,7 +292,11 @@ function Parser.ParsePrimary(Self: Parser): Expression
     end
 
     if not Self:Match(Token.Types.Identifier, Token.Types.Number, Token.Types.String, Token.Types.Nil, Token.Types.True, Token.Types.False) then
-        Parser.Error(Self:PeekToken(), `Expected expression, got '{Self:PeekToken().Lexeme}'.`)
+        if Self:IsAtEnd() then
+            Parser.Error(Self:PeekToken(), `Expected expression, got '{Self:PeekToken().Lexeme}'.`)
+        else
+            Parser.Error(Self:PreviousToken(), `Expected expression, reached the end of the script`)
+        end
     end
 
     return Ast.LiteralExpression(Self:Advance())

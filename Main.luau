@@ -3,7 +3,10 @@
 local Luh = require("./Luh")
 
 local Script = [[
-true xor 1
+var x = 2
+x -= 3
+
+x +
 ]]
 
 --[[
