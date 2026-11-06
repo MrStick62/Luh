@@ -85,6 +85,7 @@ Token.Types = {
     Type = 337,
     Var = 338,
     While = 339,
+    Xor = 340,
 }
 
 return Token

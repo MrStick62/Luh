@@ -377,6 +377,7 @@ Lexer.Keywords = {
     ["type"] = Token.Types.Type,
     ["var"] = Token.Types.Var,
     ["while"] = Token.Types.While,
+    ["xor"] = Token.Types.Xor
 }
 
 return Lexer

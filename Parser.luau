@@ -124,16 +124,32 @@ function Parser.ParseExpression(Self: Parser): Expression
 end
 
 function Parser.ParseAssignmentExpression(Self: Parser): Expression
+    local Expression = Self:ParseXor()
+
+    
+    if Self:Match(Token.Types.Equals, Token.Types.PlusEquals, Token.Types.MinusEquals, Token.Types.StarEquals, 
+            Token.Types.SlashEquals, Token.Types.DoubleSlashEquals, Token.Types.ModuloEquals, Token.Types.KaratEquals) then
+
+        local Operator = Self:Advance()
+
+        if Expression.Type ~= "LiteralExpression" or Expression.Value.Type ~= Token.Types.Identifier then
+            return Expression
+        end
+
+        local Right = Self:ParseAssignmentExpression()
+        return Ast.AssignmentExpression(Expression.Value, Operator, Right)
+    end
+
+    return Expression
+end
+
+function Parser.ParseXor(Self: Parser): Expression
     local Expression = Self:ParseOr()
 
-    if Expression.Type == "LiteralExpression" and Expression.Value.Type == Token.Types.Identifier then
-        while Self:Match(Token.Types.Equals, Token.Types.PlusEquals, Token.Types.MinusEquals, Token.Types.StarEquals, 
-                Token.Types.SlashEquals, Token.Types.DoubleSlashEquals, Token.Types.ModuloEquals, Token.Types.KaratEquals) do
-
-            local Operator = Self:Advance()
-            local Right = Self:ParseOr()
-            Expression = Ast.AssignmentExpression(Expression.Value, Operator, Right)
-        end
+    while Self:Match(Token.Types.Xor) do
+        local Operator = Self:Advance()
+        local Right = Self:ParseOr()
+        Expression = Ast.BinaryExpression(Expression, Operator, Right)
     end
 
     return Expression
