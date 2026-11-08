@@ -17,6 +17,7 @@ type Expression = Ast.Expression
 
 type ExpressionStatement = Ast.ExpressionStatement
 type VariableStatement = Ast.VariableStatement
+type DoStatement = Ast.DoStatement
 type Statement = Ast.Statement
 type Ast = Ast.Ast
 
@@ -84,9 +85,26 @@ function Interpreter.EvaluateVariableStatement(Self: Interpreter, Statement: Var
     Self.Environment:Define(Statement.Identifier.Lexeme, Value)
 end
 
+function Interpreter.EvaluateDoStatement(Self: Interpreter, Statement: DoStatement)
+    local Scope = Environment.New(Self.Environment)
+    Self:EvaluateBlock(Statement.Statements, Scope)
+end
+
+function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment)
+    local Outside = Self.Environment
+    Self.Environment = Environment
+
+    for _, Statement in Statements do
+        Self:EvaluateStatement(Statement)
+    end
+
+    Self.Environment = Outside
+end
+
 Interpreter.StatementMap = {
     ExpressionStatement = Interpreter.EvaluateExpressionStatement,
     VariableStatement = Interpreter.EvaluateVariableStatement,
+    DoStatement = Interpreter.EvaluateDoStatement,
 } :: { [string]: (Self: Interpreter, Statement: Statement) -> () }
 
 ----------------------------

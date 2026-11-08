@@ -36,7 +36,7 @@ function Parser.Error(Token: Token, Message: string)
 end
 
 function Parser.IsAtEnd(Self: Parser): boolean
-    return if Self:PeekToken() then false else true
+    return if not Self:PeekToken() or Self:PeekToken().Type == Token.Types.EOF then true else false
 end
 
 function Parser.Advance(Self: Parser): Token
@@ -79,12 +79,12 @@ end
 function Parser.ParseStatement(Self: Parser): Statement
     if Self:Match(Token.Types.Var) then
         Self:Advance()
-        return Parser.ParseVar(Self)
+        return Self:ParseVar()
     end
 
     if Self:Match(Token.Types.Do) then
         Self:Advance()
-        return Parser.ParseDo(Self)
+        return Self:ParseDo()
     end
 
     return Ast.ExpressionStatement(Self:ParseExpression())
@@ -109,12 +109,16 @@ end
 function Parser.ParseDo(Self: Parser): Statement
     local Statements = {}
 
-    while not Self:Match(Token.Types.Do) and not Self:IsAtEnd() do
+    local DoToken = Self:PreviousToken()
+
+    while not Self:Match(Token.Types.End) and not Self:IsAtEnd() do
         table.insert(Statements, Self:ParseStatement())
     end
 
-    if not Self:Match(Token.Types.Do) then
-        --Parser.Error(Token, Message)
+    if Self:Match(Token.Types.End) then
+        Self:Advance()
+    else
+        Parser.Error(DoToken, `Expected 'end' to close 'do'`)
     end
 
     return Ast.DoStatement(Statements)
@@ -293,9 +297,9 @@ function Parser.ParsePrimary(Self: Parser): Expression
 
     if not Self:Match(Token.Types.Identifier, Token.Types.Number, Token.Types.String, Token.Types.Nil, Token.Types.True, Token.Types.False) then
         if Self:IsAtEnd() then
-            Parser.Error(Self:PeekToken(), `Expected expression, got '{Self:PeekToken().Lexeme}'.`)
-        else
             Parser.Error(Self:PreviousToken(), `Expected expression, reached the end of the script`)
+        else
+            Parser.Error(Self:PeekToken(), `Expected expression, got '{Self:PeekToken().Lexeme}'`)
         end
     end
 
