@@ -133,24 +133,42 @@ function Parser.ParseIf(Self: Parser): Statement
         Parser.Error(ThenToken, `Expected 'then' when parsing if statement, got {ThenToken.Lexeme}`)
     end
 
+    local Statements = {}
+    local ElseIf = {}
+    local Else = {}
+
     while not Self:Match(Token.Types.End) do
         while not Self:Match(Token.Types.Elseif, Token.Types.Else, Token.Types.End) and not Self:IsAtEnd() do
-            table.insert(Statements, Self:ParseStatement())
+            if #ElseIf > 0 then
+                table.insert(ElseIf[#ElseIf].Statements, Self:ParseStatement())
+            else
+                table.insert(Statements, Self:ParseStatement())
+            end
         end
 
-        if Self:Match(Token.Types.Else) then
-            Self:ParseBlock(Self:Advance())
+        if Self:Match(Token.Types.Elseif) then
+            Self:Advance()
+            local ElseIfExpression = Self:ParseExpression()
+
+            local ElseIfThenToken = Self:Advance()
+            if ThenToken.Type ~= Token.Types.Then then
+                Parser.Error(ElseIfThenToken, `Expected 'then' when parsing if statement, got {ThenToken.Lexeme}`)
+            end
+
+            table.insert(ElseIf, Ast.Conditional(ElseIfExpression, {}))
+        elseif Self:Match(Token.Types.Else) then
+            Else = Self:ParseBlock(Self:Advance())
             break
         end
     end
 
     if Self:Match(Token.Types.End) then
         Self:Advance()
-    else
+    elseif not Else then
         Parser.Error(IfToken, `Expected 'end' to close '{IfToken.Lexeme}' statement`)
     end
 
-    return Ast.IfStatement(Expression, Statements)
+    return Ast.IfStatement(Ast.Conditional(Expression, Statements), ElseIf, Else)
 end
 
 Parser.StatementMap = {

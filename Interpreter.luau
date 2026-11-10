@@ -91,9 +91,18 @@ function Interpreter.EvaluateDoStatement(Self: Interpreter, Statement: DoStateme
 end
 
 function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
-    if Self:EvaluateExpression(Statement.Expression) then
-        local Scope = Environment.New(Self.Environment)
-        Self:EvaluateBlock(Statement.Statements, Scope)
+    local Scope = Environment.New(Self.Environment)
+    if Self:EvaluateExpression(Statement.Default.Expression) then
+        Self:EvaluateBlock(Statement.Default.Statements, Scope)
+    else
+        for _, Elseif in Statement.Elseif do
+            if Self:EvaluateExpression(Elseif.Expression) then
+                Self:EvaluateBlock(Elseif.Statements, Scope)
+                return
+            end
+        end
+
+        Self:EvaluateBlock(Statement.Else, Scope)
     end
 end
 
@@ -112,6 +121,7 @@ Interpreter.StatementMap = {
     ExpressionStatement = Interpreter.EvaluateExpressionStatement,
     VariableStatement = Interpreter.EvaluateVariableStatement,
     DoStatement = Interpreter.EvaluateDoStatement,
+    IfStatement = Interpreter.EvaluateIfStatement,
 } :: { [string]: (Self: Interpreter, Statement: Statement) -> () }
 
 ----------------------------

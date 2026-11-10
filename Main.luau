@@ -3,17 +3,14 @@
 local Luh = require("./Luh")
 
 local Script = [[
-var a = 1
 
-do
-    var a = a + 3
-    do
-        var a = 5
-        a
-    end
-    a
+if 2 then
+    1 + 2
+elseif false then
+    2 + 2
+else
+    2 + 3
 end
-a
 ]]
 
 --[[
