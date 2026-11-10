@@ -77,20 +77,17 @@ function Parser.Parse(Self: Parser): { Statement }
 end
 
 function Parser.ParseStatement(Self: Parser): Statement
-    if Self:Match(Token.Types.Var) then
-        Self:Advance()
-        return Self:ParseVar()
-    end
-
-    if Self:Match(Token.Types.Do) then
-        Self:Advance()
-        return Self:ParseDo()
+    local Statement = Parser.StatementMap[Self:PeekToken().Type]
+    if Statement then
+        return Statement(Self)
     end
 
     return Ast.ExpressionStatement(Self:ParseExpression())
 end
 
 function Parser.ParseVar(Self: Parser): Statement
+    Self:Advance()
+
     local Identifier = Self:Advance()
     if Identifier.Type ~= Token.Types.Identifier then
         Parser.Error(Identifier, `Expected identifier, got '{Identifier.Lexeme}'`)
@@ -106,10 +103,8 @@ function Parser.ParseVar(Self: Parser): Statement
     return Ast.VariableStatement(Identifier, Initializer)
 end
 
-function Parser.ParseDo(Self: Parser): Statement
+function Parser.ParseBlock(Self: Parser, StartToken: Token): { Statement }
     local Statements = {}
-
-    local DoToken = Self:PreviousToken()
 
     while not Self:Match(Token.Types.End) and not Self:IsAtEnd() do
         table.insert(Statements, Self:ParseStatement())
@@ -118,11 +113,51 @@ function Parser.ParseDo(Self: Parser): Statement
     if Self:Match(Token.Types.End) then
         Self:Advance()
     else
-        Parser.Error(DoToken, `Expected 'end' to close 'do'`)
+        Parser.Error(StartToken, `Expected 'end' to close '{StartToken.Lexeme}' statement`)
     end
 
-    return Ast.DoStatement(Statements)
+    return Statements
 end
+
+function Parser.ParseDo(Self: Parser): Statement
+    return Ast.DoStatement(Self:ParseBlock(Self:Advance()))
+end
+
+function Parser.ParseIf(Self: Parser): Statement
+    local IfToken = Self:Advance()
+
+    local Expression = Self:ParseExpression()
+    
+    local ThenToken = Self:Advance()
+    if ThenToken.Type ~= Token.Types.Then then
+        Parser.Error(ThenToken, `Expected 'then' when parsing if statement, got {ThenToken.Lexeme}`)
+    end
+
+    while not Self:Match(Token.Types.End) do
+        while not Self:Match(Token.Types.Elseif, Token.Types.Else, Token.Types.End) and not Self:IsAtEnd() do
+            table.insert(Statements, Self:ParseStatement())
+        end
+
+        if Self:Match(Token.Types.Else) then
+            Self:ParseBlock(Self:Advance())
+            break
+        end
+    end
+
+    if Self:Match(Token.Types.End) then
+        Self:Advance()
+    else
+        Parser.Error(IfToken, `Expected 'end' to close '{IfToken.Lexeme}' statement`)
+    end
+
+    return Ast.IfStatement(Expression, Statements)
+end
+
+Parser.StatementMap = {
+    [Token.Types.Var] = Parser.ParseVar,
+    [Token.Types.Do] = Parser.ParseDo,
+    [Token.Types.If] = Parser.ParseIf,
+}
 
 --[[
 function Parser.ParseCommaExpression(Self: Parser): Expression

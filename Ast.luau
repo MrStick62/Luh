@@ -55,7 +55,19 @@ export type DoStatement = {
     Statements: { Statement },
 }
 
-export type Statement = ExpressionStatement | VariableStatement | DoStatement
+export type Conditional = {
+    Expression: Expression,
+    Statements: { Statement }
+}
+
+export type IfStatement = {
+    Type: "IfStatement",
+    Default: Conditional,
+    Elseif: { Conditional },
+    Else: { Statement },
+}
+
+export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement
 
 export type Ast = Expression
 
@@ -124,6 +136,26 @@ function Ast.DoStatement(Statements: { Statement }): DoStatement
 
     Self.Type = "DoStatement"
     Self.Statements = Statements
+
+    return Self
+end
+
+function Ast.Conditional(Expression: Expression, Statements: { Statement }): Conditional
+    local Self = {}
+    
+    Self.Expression = Expression
+    Self.Statements = Statements
+
+    return Self
+end
+
+function Ast.IfStatement(Default: Conditional, ElseIf: { Conditional }, Else: { Statement }): IfStatement
+    local Self = {} :: IfStatement
+
+    Self.Type = "IfStatement"
+    Self.Default = Default
+    Self.Elseif = ElseIf
+    Self.Else = Else
 
     return Self
 end

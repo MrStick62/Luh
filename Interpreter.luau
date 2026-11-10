@@ -18,8 +18,8 @@ type Expression = Ast.Expression
 type ExpressionStatement = Ast.ExpressionStatement
 type VariableStatement = Ast.VariableStatement
 type DoStatement = Ast.DoStatement
+type IfStatement = Ast.IfStatement
 type Statement = Ast.Statement
-type Ast = Ast.Ast
 
 type RuntimeError = {
     Token: Token,
@@ -88,6 +88,13 @@ end
 function Interpreter.EvaluateDoStatement(Self: Interpreter, Statement: DoStatement)
     local Scope = Environment.New(Self.Environment)
     Self:EvaluateBlock(Statement.Statements, Scope)
+end
+
+function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
+    if Self:EvaluateExpression(Statement.Expression) then
+        local Scope = Environment.New(Self.Environment)
+        Self:EvaluateBlock(Statement.Statements, Scope)
+    end
 end
 
 function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment)

@@ -6,9 +6,14 @@ local Script = [[
 var a = 1
 
 do
-    var a = a + 2
+    var a = a + 3
+    do
+        var a = 5
+        a
+    end
     a
 end
+a
 ]]
 
 --[[
