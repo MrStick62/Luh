@@ -37,6 +37,7 @@ export type AssignmentExpression = {
     Expression: Expression,
 }
 
+
 export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression
 
 export type ExpressionStatement = {
@@ -56,8 +57,8 @@ export type DoStatement = {
 }
 
 export type Conditional = {
-    Expression: Expression,
-    Statements: { Statement }
+    Condition: Expression,
+    Body: { Statement }
 }
 
 export type IfStatement = {
@@ -67,7 +68,23 @@ export type IfStatement = {
     Else: { Statement },
 }
 
-export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement
+export type WhileStatement = {
+    Type: "WhileStatement",
+    Condition: Expression,
+    Body: { Statement },
+}
+
+export type ForStatement = {
+    Type: "ForStatement",
+    Token: Token,
+    Identifier: Token,
+    Initial: Expression,
+    Limit: Expression,
+    Increment: Expression?,
+    Body: { Statement },
+}
+
+export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement
 
 export type Ast = Expression
 
@@ -140,11 +157,11 @@ function Ast.DoStatement(Statements: { Statement }): DoStatement
     return Self
 end
 
-function Ast.Conditional(Expression: Expression, Statements: { Statement }): Conditional
+function Ast.Conditional(Condition: Expression, Body: { Statement }): Conditional
     local Self = {}
     
-    Self.Expression = Expression
-    Self.Statements = Statements
+    Self.Condition = Condition
+    Self.Body = Body
 
     return Self
 end
@@ -156,6 +173,30 @@ function Ast.IfStatement(Default: Conditional, ElseIf: { Conditional }, Else: { 
     Self.Default = Default
     Self.Elseif = ElseIf
     Self.Else = Else
+
+    return Self
+end
+
+function Ast.WhileStatement(Condition: Expression, Body: { Statement }): WhileStatement
+    local Self = {} :: WhileStatement
+
+    Self.Type = "WhileStatement"
+    Self.Condition = Condition
+    Self.Body = Body
+
+    return Self
+end
+
+function Ast.ForStatement(Token: Token, Identifier: Token, Initial: Expression, Limit: Expression, Increment: Expression?, Body: { Statement }): ForStatement
+    local Self = {} :: ForStatement
+
+    Self.Type = "ForStatement"
+    Self.Token = Token
+    Self.Identifier = Identifier
+    Self.Initial = Initial
+    Self.Limit = Limit
+    Self.Increment = Increment
+    Self.Body = Body
 
     return Self
 end

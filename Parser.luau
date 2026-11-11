@@ -5,7 +5,17 @@ local Token = require("./Token")
 type Token = Token.Token
 
 local Ast = require("./Ast")
+type LiteralExpression = Ast.LiteralExpression
+type BinaryExpression = Ast.BinaryExpression
+type UnaryExpression = Ast.UnaryExpression
+type AssignmentExpression = Ast.AssignmentExpression
 type Expression = Ast.Expression
+
+type ExpressionStatement = Ast.ExpressionStatement
+type VariableStatement = Ast.VariableStatement
+type DoStatement = Ast.DoStatement
+type IfStatement = Ast.IfStatement
+type WhileStatement = Ast.WhileStatement
 type Statement = Ast.Statement
 
 local Parser = {}
@@ -123,26 +133,27 @@ function Parser.ParseDo(Self: Parser): Statement
     return Ast.DoStatement(Self:ParseBlock(Self:Advance()))
 end
 
+-- I don't like this implementation. Take a look at this and clean it up later
 function Parser.ParseIf(Self: Parser): Statement
     local IfToken = Self:Advance()
 
-    local Expression = Self:ParseExpression()
+    local Condition = Self:ParseExpression()
     
     local ThenToken = Self:Advance()
     if ThenToken.Type ~= Token.Types.Then then
         Parser.Error(ThenToken, `Expected 'then' when parsing if statement, got {ThenToken.Lexeme}`)
     end
 
-    local Statements = {}
+    local Body = {}
     local ElseIf = {}
     local Else = {}
 
     while not Self:Match(Token.Types.End) do
         while not Self:Match(Token.Types.Elseif, Token.Types.Else, Token.Types.End) and not Self:IsAtEnd() do
             if #ElseIf > 0 then
-                table.insert(ElseIf[#ElseIf].Statements, Self:ParseStatement())
+                table.insert(ElseIf[#ElseIf].Body, Self:ParseStatement())
             else
-                table.insert(Statements, Self:ParseStatement())
+                table.insert(Body, Self:ParseStatement())
             end
         end
 
@@ -152,7 +163,7 @@ function Parser.ParseIf(Self: Parser): Statement
 
             local ElseIfThenToken = Self:Advance()
             if ThenToken.Type ~= Token.Types.Then then
-                Parser.Error(ElseIfThenToken, `Expected 'then' when parsing if statement, got {ThenToken.Lexeme}`)
+                Parser.Error(ElseIfThenToken, `Expected 'then' when parsing 'if' statement, got {ThenToken.Lexeme}`)
             end
 
             table.insert(ElseIf, Ast.Conditional(ElseIfExpression, {}))
@@ -168,13 +179,71 @@ function Parser.ParseIf(Self: Parser): Statement
         Parser.Error(IfToken, `Expected 'end' to close '{IfToken.Lexeme}' statement`)
     end
 
-    return Ast.IfStatement(Ast.Conditional(Expression, Statements), ElseIf, Else)
+    return Ast.IfStatement(Ast.Conditional(Condition, Body), ElseIf, Else)
+end
+
+function Parser.ParseWhile(Self: Parser): Statement
+    local WhileToken = Self:Advance()
+
+    local Condition = Self:ParseExpression()
+
+    local DoToken = Self:Advance()
+    if DoToken.Type ~= Token.Types.Do then
+        Parser.Error(DoToken, `Expected 'do' when parsing 'while' statement, got '{DoToken.Lexeme}'`)
+    end
+
+    local Body = Self:ParseBlock(WhileToken)
+
+    return Ast.WhileStatement(Condition, Body)
+end
+
+function Parser.ParseFor(Self: Parser): Statement
+    local ForToken = Self:Advance()
+
+    if not Self:Match(Token.Types.Identifier) then
+        Parser.Error(Self:PeekToken(), `Expected identifier when parsing`)
+    end
+
+    local Identifier = Self:Advance()
+
+    if Self:Match(Token.Types.Equals) then
+        Self:Advance()
+    else
+        Parser.Error(Self:PeekToken(), `Expected '=' when parsing assignment, got '{Self:PeekToken()}'`)
+    end
+
+    local Initial = Self:ParseExpression() 
+    
+    if Self:Match(Token.Types.Comma) then
+        Self:Advance()
+    else
+        Parser.Error(Self:PeekToken(), `Expected comma when parsing 'for' statement, got '{Self:PeekToken()}'`)
+    end
+
+    local Target = Self:ParseExpression()
+
+    local Increment = nil
+    if Self:Match(Token.Types.Comma) then
+        Self:Advance()
+        Increment = Self:ParseExpression()
+    end
+
+    local DoToken = Self:Advance()
+    if DoToken.Type ~= Token.Types.Do then
+        Parser.Error(DoToken, `Expected 'do' when parsing 'for' statement, got '{DoToken.Lexeme}'`)
+    end
+
+    local Body = Self:ParseBlock(ForToken)
+
+    return Ast.ForStatement(ForToken, Identifier, Initial, Target, Increment, Body)
 end
 
 Parser.StatementMap = {
     [Token.Types.Var] = Parser.ParseVar,
     [Token.Types.Do] = Parser.ParseDo,
     [Token.Types.If] = Parser.ParseIf,
+    [Token.Types.While] = Parser.ParseWhile,
+    [Token.Types.For] = Parser.ParseFor,
 }
 
 --[[

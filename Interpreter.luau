@@ -19,6 +19,8 @@ type ExpressionStatement = Ast.ExpressionStatement
 type VariableStatement = Ast.VariableStatement
 type DoStatement = Ast.DoStatement
 type IfStatement = Ast.IfStatement
+type WhileStatement = Ast.WhileStatement
+type ForStatement = Ast.ForStatement
 type Statement = Ast.Statement
 
 type RuntimeError = {
@@ -92,17 +94,55 @@ end
 
 function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
     local Scope = Environment.New(Self.Environment)
-    if Self:EvaluateExpression(Statement.Default.Expression) then
-        Self:EvaluateBlock(Statement.Default.Statements, Scope)
+    if Self:EvaluateExpression(Statement.Default.Condition) then
+        Self:EvaluateBlock(Statement.Default.Body, Scope)
     else
         for _, Elseif in Statement.Elseif do
-            if Self:EvaluateExpression(Elseif.Expression) then
-                Self:EvaluateBlock(Elseif.Statements, Scope)
+            if Self:EvaluateExpression(Elseif.Condition) then
+                Self:EvaluateBlock(Elseif.Body, Scope)
                 return
             end
         end
 
         Self:EvaluateBlock(Statement.Else, Scope)
+    end
+end
+
+function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileStatement)
+    while Self:EvaluateExpression(Statement.Condition) do
+        local Scope = Environment.New(Self.Environment)
+        Self:EvaluateBlock(Statement.Body, Scope)
+    end
+end
+
+function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForStatement)
+    local CounterValue = Self:EvaluateExpression(Statement.Initial)
+    if typeof(CounterValue) ~= "number" then
+        Interpreter.Error(Statement.Token, `Expected number for 'for' counter, got {typeof(CounterValue)}`)
+    end
+
+    local Limit = Self:EvaluateExpression(Statement.Limit)
+    if typeof(Limit) ~= "number" then
+        Interpreter.Error(Statement.Token, `Expected number for 'for' limit, got {typeof(Limit)}`)
+    end
+
+    local Increment = Statement.Increment and Self:EvaluateExpression(Statement.Increment) or 1
+    if typeof(Increment) ~= "number" then
+        Interpreter.Error(Statement.Token, `Expected number for 'for' increment, got {typeof(Increment)}`)
+    end
+
+    local Direction = math.sign(Increment)
+
+    while true do
+        if Direction == 1 and CounterValue > Limit or Direction == -1 and CounterValue < Limit then
+            break
+        end
+
+        local Scope = Environment.New(Self.Environment)
+        Scope:Define(Statement.Identifier.Lexeme, CounterValue)
+        Self:EvaluateBlock(Statement.Body, Scope)
+
+        CounterValue += Increment
     end
 end
 
@@ -122,6 +162,8 @@ Interpreter.StatementMap = {
     VariableStatement = Interpreter.EvaluateVariableStatement,
     DoStatement = Interpreter.EvaluateDoStatement,
     IfStatement = Interpreter.EvaluateIfStatement,
+    WhileStatement = Interpreter.EvaluateWhileStatement,
+    ForStatement = Interpreter.EvaluateForStatement,
 } :: { [string]: (Self: Interpreter, Statement: Statement) -> () }
 
 ----------------------------

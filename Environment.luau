@@ -3,8 +3,10 @@
 local Environment = {}
 Environment.__index = Environment
 
+
+
 type EnvironmentData = {
-    Values: { [string]: any },
+    Values: { [string]: { Value: any } },
     Outside: Environment?,
 }
 
@@ -20,12 +22,12 @@ function Environment.New(Outside: Environment?): Environment
 end
 
 function Environment.Define(Self: Environment, Identifier: string, Value: any)
-    Self.Values[Identifier] = Value
+    Self.Values[Identifier] = { Value = Value }
 end
 
 function Environment.Assign(Self: Environment, Identifier: string, Value: any): boolean
     if Self.Values[Identifier] then
-        Self.Values[Identifier] = Value
+        Self.Values[Identifier] = { Value = Value }
         return true
     end
 
@@ -34,7 +36,7 @@ end
 
 function Environment.Get(Self: Environment, Identifier: string): any
     local Value = Self.Values[Identifier]
-    return Value ~= nil and Value or Self.Outside and Self.Outside:Get(Identifier)
+    return Value ~= nil and Value.Value or Self.Outside and Self.Outside:Get(Identifier)
 end
 
 return Environment
