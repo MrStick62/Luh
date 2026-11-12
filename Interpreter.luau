@@ -63,20 +63,29 @@ function Interpreter.LoadGlobal(Self: Interpreter, Identifier: string, Value: an
 end
 
 function Interpreter.Run(Self: Interpreter, Statements: { Statement })
-    local Ok, Err = xpcall(
+    local Ok, Err: Jump | RuntimeError = xpcall(
         function()
             for _, Statement in Statements do
                 Self:EvaluateStatement(Statement)
             end
         end,
-        function(Err: RuntimeError): RuntimeError
+        function(Err)
             return Err
         end)
 
     if not Ok then
-        Error.Report(Err.Token.Location, Err.Message, Error.Type.Runtime)
-        return
+        if Err.Type == "Jump" then
+            if Err.Keyword.Type == Token.Types.Return then
+                return Err.Value
+            else
+                Error.Report(Err.Keyword.Location, `Attempt to call {Err.Keyword.Lexeme} statement outside of a loop`, Error.Type.Runtime)
+            end
+        elseif Err.Type == "RuntimeError" then
+            Error.Report(Err.Token.Location, Err.Message, Error.Type.Runtime)
+        end
     end
+
+    return nil
 end
 
 function Interpreter.Error(Token: Token, Message: string)
@@ -121,32 +130,23 @@ end
 function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
     local Scope = Environment.New(Self.Environment)
     if Self:EvaluateExpression(Statement.Default.Condition) then
-        local Jump = Self:EvaluateBlock(Statement.Default.Body, Scope)
-        if Jump then
-            Interpreter.Jump(Jump.Keyword, Jump.Value)
-        end
+        Self:EvaluateBlock(Statement.Default.Body, Scope)
     else
         for _, Elseif in Statement.Elseif do
             if Self:EvaluateExpression(Elseif.Condition) then
-                local Jump = Self:EvaluateBlock(Elseif.Body, Scope)
-                if Jump then
-                    Interpreter.Jump(Jump.Keyword, Jump.Value)
-                end
+                Self:EvaluateBlock(Elseif.Body, Scope)
                 return
             end
         end
 
-        local Jump = Self:EvaluateBlock(Statement.Else, Scope)
-        if Jump then
-            Interpreter.Jump(Jump.Keyword, Jump.Value)
-        end
+        Self:EvaluateBlock(Statement.Else, Scope)
     end
 end
 
 function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileStatement)
     while Self:EvaluateExpression(Statement.Condition) do
         local Scope = Environment.New(Self.Environment)
-        local Jump = Self:EvaluateBlock(Statement.Body, Scope)
+        local Jump = Self:CatchJump(Statement.Body, Scope)
         if Jump then
             if Jump.Keyword.Type == Token.Types.Break then
                 break
@@ -184,7 +184,7 @@ function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForState
 
         local Scope = Environment.New(Self.Environment)
         Scope:Define(Statement.Identifier.Lexeme, CounterValue)
-        local Jump = Self:EvaluateBlock(Statement.Body, Scope)
+        local Jump = Self:CatchJump(Statement.Body, Scope)
         
         CounterValue += Increment
 
@@ -209,21 +209,29 @@ function Interpreter.EvaluateJumpStatement(Self: Interpreter, Statement: JumpSta
     Interpreter.Jump(Statement.Keyword, Value)
 end
 
-function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment): Jump?
+function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment)
     local Outside = Self.Environment
     Self.Environment = Environment
 
+    for _, Statement in Statements do
+        Self:EvaluateStatement(Statement)
+    end
+
+    Self.Environment = Outside
+end
+
+function Interpreter.CatchJump(Self: Interpreter, Statements: { Statement }, Environment: Environment): Jump?
+    local PreviousEnvironment = Self.Environment
+
     local Ok, Err: RuntimeError | Jump = xpcall(
         function()
-            for _, Statement in Statements do
-                Self:EvaluateStatement(Statement)
-            end
+            Self:EvaluateBlock(Statements, Environment)
         end, 
         function(Value)
             return Value
         end)
 
-    Self.Environment = Outside
+    Self.Environment = PreviousEnvironment
 
     if not Ok then
         if Err.Type == "Jump" then
@@ -246,7 +254,7 @@ function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, B
             Scope:Define(Parameter.Lexeme, Arguments[i])
         end
 
-        local Return = Self:EvaluateBlock(Body, Scope)
+        local Return = Self:CatchJump(Body, Scope)
 
         if Return then
             if Return.Keyword.Type == Token.Types.Return then
@@ -402,13 +410,7 @@ Interpreter.BinaryFunctions = {
     [Token.Types.DoubleDot] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr)
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "string" and RightType == "string" then
-            return Left .. Right
-        end
-
-         Interpreter.Error(Operator, `Attempt to concatenate {LeftType} and {RightType}`)
-        return nil
+        return tostring(Left) .. tostring(Right)
     end,
     [Token.Types.And] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         return Left and Self:EvaluateExpression(RightExpr)

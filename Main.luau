@@ -4,17 +4,30 @@ local Luh = require("./Luh")
 
 local Script = [[
 
-for i = 1, 10 do
-    if i == 5 then
-        continue
+fun Fibonacci(n)
+    if n <= 1 then
+        return n
     end
 
-    print(i)
+    var first = 1
+    var second = 1
+
+    for i = 3, n do
+        var curr = first + second
+        first = second
+        second = curr
+    end
+
+    return second
 end
+
+var index = 5
+print("Fib[" .. index .. "]: " .. Fibonacci(index))
 
 ]]
 
 --[[
+
 local Script = [[
 2 or (5 + 200) / 8.5
 var short = "bruh"
@@ -33,6 +46,7 @@ yipee!
 
 if 1 ~= 2 then
 end
+
 ]]
 
 Luh.Run(Script)

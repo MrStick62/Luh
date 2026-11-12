@@ -40,7 +40,7 @@ function Luh.Run(Source: string)
 
     Globals.Load(TreeInterpreter)
 
-    TreeInterpreter:Run(Expression)
+    local Output = TreeInterpreter:Run(Expression)
 end
 
 return Luh
