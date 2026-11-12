@@ -31,7 +31,6 @@ function Luh.Run(Source: string)
     ]]
 
     if Error.ShouldHalt then
-        print("Lexer failed. Exiting.")
         return
     end
 
@@ -39,7 +38,6 @@ function Luh.Run(Source: string)
     local Expression = TokenParser:Parse()
 
     if Error.ShouldHalt then
-        print("Parse failed. Exiting.")
         return
     end
 

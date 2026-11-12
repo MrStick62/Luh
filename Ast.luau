@@ -4,13 +4,6 @@ local Token = require("./Token")
 type Token = Token.Token
 
 local Ast = {}
-Ast.__index = {}
-
-export type AstType = "BinaryExpression" | "UnaryExpression"
-
-type AstData = {
-    Type: AstType,
-}
 
 export type LiteralExpression = {
     Type: "LiteralExpression",
@@ -37,8 +30,13 @@ export type AssignmentExpression = {
     Expression: Expression,
 }
 
+export type CallExpression = {
+    Type: "CallExpression",
+    Function: Expression,
+    Arguments: { Expression },
+}
 
-export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression
+export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression
 
 export type ExpressionStatement = {
     Type: "ExpressionStatement",
@@ -84,7 +82,14 @@ export type ForStatement = {
     Body: { Statement },
 }
 
-export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement
+export type FunctionStatement = {
+    Type: "FunctionStatement",
+    Identifier: Token,
+    Parameters: { Token },
+    Body: { Statement },
+}
+
+export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement | FunctionStatement
 
 export type Ast = Expression
 
@@ -125,6 +130,16 @@ function Ast.AssignmentExpression(Identifier: Token, Operator: Token, Expression
     Self.Identifier = Identifier
     Self.Operator = Operator
     Self.Expression = Expression
+
+    return Self
+end
+
+function Ast.CallExpression(Function: Expression, Arguments: { Expression }): CallExpression
+    local Self = {} :: CallExpression
+
+    Self.Type = "CallExpression"
+    Self.Function = Function
+    Self.Arguments = Arguments
 
     return Self
 end
@@ -196,6 +211,17 @@ function Ast.ForStatement(Token: Token, Identifier: Token, Initial: Expression, 
     Self.Initial = Initial
     Self.Limit = Limit
     Self.Increment = Increment
+    Self.Body = Body
+
+    return Self
+end
+
+function Ast.FunctionStatement(Identifier: Token, Parameters: { Token }, Body: { Statement }): FunctionStatement
+    local Self = {} :: FunctionStatement
+
+    Self.Type = "FunctionStatement"
+    Self.Identifier = Identifier
+    Self.Parameters = Parameters
     Self.Body = Body
 
     return Self

@@ -13,6 +13,7 @@ type LiteralExpression = Ast.LiteralExpression
 type BinaryExpression = Ast.BinaryExpression
 type UnaryExpression = Ast.UnaryExpression
 type AssignmentExpression = Ast.AssignmentExpression
+type CallExpression = Ast.CallExpression
 type Expression = Ast.Expression
 
 type ExpressionStatement = Ast.ExpressionStatement
@@ -21,6 +22,7 @@ type DoStatement = Ast.DoStatement
 type IfStatement = Ast.IfStatement
 type WhileStatement = Ast.WhileStatement
 type ForStatement = Ast.ForStatement
+type FunctionStatement = Ast.FunctionStatement
 type Statement = Ast.Statement
 
 type RuntimeError = {
@@ -146,6 +148,10 @@ function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForState
     end
 end
 
+function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: FunctionStatement)
+    Self.Environment:Define(Statement.Identifier.Lexeme, Self:FunctionToValue(Statement.Parameters, Statement.Body))
+end
+
 function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment)
     local Outside = Self.Environment
     Self.Environment = Environment
@@ -157,6 +163,20 @@ function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement },
     Self.Environment = Outside
 end
 
+function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (any) -> ()
+    local Outside = Self.Environment
+
+    return function(Arguments: { any })
+        local Scope = Environment.New(Outside)
+
+        for i, Parameter in Parameters do
+            Scope:Define(Parameter.Lexeme, Arguments[i])
+        end
+
+        Self:EvaluateBlock(Body, Scope)
+    end
+end
+
 Interpreter.StatementMap = {
     ExpressionStatement = Interpreter.EvaluateExpressionStatement,
     VariableStatement = Interpreter.EvaluateVariableStatement,
@@ -164,6 +184,7 @@ Interpreter.StatementMap = {
     IfStatement = Interpreter.EvaluateIfStatement,
     WhileStatement = Interpreter.EvaluateWhileStatement,
     ForStatement = Interpreter.EvaluateForStatement,
+    FunctionStatement = Interpreter.EvaluateFunctionStatement,
 } :: { [string]: (Self: Interpreter, Statement: Statement) -> () }
 
 ----------------------------
@@ -195,6 +216,22 @@ end
 function Interpreter.EvaluateLiteralExpression(Self: Interpreter, Expression: LiteralExpression): any
     local Evaluation = Interpreter.LiteralEvaluations[Expression.Value.Type]
     return Evaluation and Evaluation(Self, Expression.Value.Lexeme)
+end
+
+function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallExpression): any
+    local Function = Self:EvaluateExpression(Expression.Function)
+
+    if typeof(Function) ~= "function" then
+        Interpreter.Error(Function, `Attempt to call a {typeof(Function)}`)
+    end
+
+    local Arguments = {}
+
+    for _, Argument in Expression.Arguments do
+        table.insert(Arguments, Self:EvaluateExpression(Argument))
+    end
+
+    return Function(Arguments)
 end
 
 Interpreter.BinaryFunctions = {
@@ -502,6 +539,7 @@ Interpreter.ExpressionMap = {
     UnaryExpression = Interpreter.EvaluateUnaryExpression,
     BinaryExpression = Interpreter.EvaluateBinaryExpression,
     AssignmentExpression = Interpreter.EvaluateAssignmentExpression,
+    CallExpression = Interpreter.EvaluateCallExpression,
 } :: { [string]: (Self: Interpreter, Expression: Expression) -> any }
 
 return Interpreter

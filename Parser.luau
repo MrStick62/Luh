@@ -18,6 +18,11 @@ type IfStatement = Ast.IfStatement
 type WhileStatement = Ast.WhileStatement
 type Statement = Ast.Statement
 
+type SyntaxError = {
+    Token: Token,
+    Message: string,
+}
+
 local Parser = {}
 Parser.__index = Parser
 
@@ -38,11 +43,10 @@ function Parser.New(Tokens: { Token }): Parser
 end
 
 function Parser.Error(Token: Token, Message: string)
-    if Token.Type == Token.Types.EOF then
-        Error.Report(Token.Location, Message, Error.Type.Syntax)
-    else
-        Error.Report(Token.Location, Message, Error.Type.Syntax)
-    end
+    error({
+        Token = Token,
+        Message = Message,
+    }, 0)
 end
 
 function Parser.IsAtEnd(Self: Parser): boolean
@@ -79,8 +83,18 @@ end
 function Parser.Parse(Self: Parser): { Statement }
     local Statements = {}
 
-    while not Self:IsAtEnd() do
-        table.insert(Statements, Self:ParseStatement())
+    local Ok, Err = xpcall(
+        function() 
+            while not Self:IsAtEnd() do
+                table.insert(Statements, Self:ParseStatement())
+            end
+        end, 
+        function(Err: SyntaxError): SyntaxError
+            return Err
+        end)
+
+    if not Ok then
+        Error.Report(Err.Token.Location, Err.Message, Error.Type.Syntax)
     end
 
     return Statements
@@ -176,7 +190,7 @@ function Parser.ParseIf(Self: Parser): Statement
     if Self:Match(Token.Types.End) then
         Self:Advance()
     elseif not Else then
-        Parser.Error(IfToken, `Expected 'end' to close '{IfToken.Lexeme}' statement`)
+        Parser.Error(IfToken, `Expected 'end' to close if statement`)
     end
 
     return Ast.IfStatement(Ast.Conditional(Condition, Body), ElseIf, Else)
@@ -189,7 +203,7 @@ function Parser.ParseWhile(Self: Parser): Statement
 
     local DoToken = Self:Advance()
     if DoToken.Type ~= Token.Types.Do then
-        Parser.Error(DoToken, `Expected 'do' when parsing 'while' statement, got '{DoToken.Lexeme}'`)
+        Parser.Error(DoToken, `Expected 'do' when parsing while loop, got '{DoToken.Lexeme}'`)
     end
 
     local Body = Self:ParseBlock(WhileToken)
@@ -201,23 +215,23 @@ function Parser.ParseFor(Self: Parser): Statement
     local ForToken = Self:Advance()
 
     if not Self:Match(Token.Types.Identifier) then
-        Parser.Error(Self:PeekToken(), `Expected identifier when parsing`)
+        Parser.Error(Self:PeekToken(), `Expected identifier when parsing for loop, got '{Self:PeekToken().Lexeme}'`)
     end
 
     local Identifier = Self:Advance()
 
-    if Self:Match(Token.Types.Equals) then
-        Self:Advance()
-    else
-        Parser.Error(Self:PeekToken(), `Expected '=' when parsing assignment, got '{Self:PeekToken()}'`)
+    if not Self:Match(Token.Types.Equals) then
+        Parser.Error(Self:PeekToken(), `Expected '=' when parsing assignment, got '{Self:PeekToken().Lexeme}'`)
     end
+
+    Self:Advance()
 
     local Initial = Self:ParseExpression() 
     
     if Self:Match(Token.Types.Comma) then
         Self:Advance()
     else
-        Parser.Error(Self:PeekToken(), `Expected comma when parsing 'for' statement, got '{Self:PeekToken()}'`)
+        Parser.Error(Self:PeekToken(), `Expected comma when parsing for loop, got '{Self:PeekToken().Lexeme}'`)
     end
 
     local Target = Self:ParseExpression()
@@ -230,12 +244,50 @@ function Parser.ParseFor(Self: Parser): Statement
 
     local DoToken = Self:Advance()
     if DoToken.Type ~= Token.Types.Do then
-        Parser.Error(DoToken, `Expected 'do' when parsing 'for' statement, got '{DoToken.Lexeme}'`)
+        Parser.Error(DoToken, `Expected 'do' when parsing for loop, got '{DoToken.Lexeme}'`)
     end
 
     local Body = Self:ParseBlock(ForToken)
 
     return Ast.ForStatement(ForToken, Identifier, Initial, Target, Increment, Body)
+end
+
+function Parser.ParseFun(Self: Parser): Statement
+    local FunctionToken = Self:Advance()
+
+    if not Self:Match(Token.Types.Identifier) then
+        Parser.Error(Self:PeekToken(), `Expected identifier when parsing function, got '{Self:PeekToken().Lexeme}'`)
+    end
+
+    local Identifier = Self:Advance()
+
+    if not Self:Match(Token.Types.LeftParenthesis) then
+        Parser.Error(Self:PeekToken(), `Expected '(' when parsing function, got '{Self:PeekToken().Lexeme}'`) 
+    end
+
+    Self:Advance()
+
+    local Parameters = {}
+
+    if not Self:Match(Token.Types.RightParenthesis) then
+        repeat
+            if not Self:Match(Token.Types.Identifier) then
+                Parser.Error(Self:PeekToken(), `Expected identifier when parsing function parameters, got '{Self:PeekToken().Lexeme}'`)
+            end
+
+            table.insert(Parameters, Self:Advance())
+        until not (Self:Match(Token.Types.Comma) and Self:Advance())
+    end
+
+    if not Self:Match(Token.Types.RightParenthesis) then
+        Parser.Error(FunctionToken, `Expected ')' when parsing function,`)
+    end
+
+    Self:Advance()
+
+    local Body = Self:ParseBlock(FunctionToken)
+
+    return Ast.FunctionStatement(Identifier, Parameters, Body)
 end
 
 Parser.StatementMap = {
@@ -244,21 +296,8 @@ Parser.StatementMap = {
     [Token.Types.If] = Parser.ParseIf,
     [Token.Types.While] = Parser.ParseWhile,
     [Token.Types.For] = Parser.ParseFor,
+    [Token.Types.Fun] = Parser.ParseFun,
 }
-
---[[
-function Parser.ParseCommaExpression(Self: Parser): Expression
-    local Expression = Self:ParseExpression()
-
-    while Self:Match(Token.Types.Comma) do
-        local Operator = Self:Advance()
-        local Right = Self:ParseExpression()
-        Expression = Ast.BinaryExpression(Expression, Operator, Right)
-    end
-
-    return Expression
-end
-]]
 
 function Parser.ParseExpression(Self: Parser): Expression
     return Self:ParseAssignmentExpression()
@@ -390,12 +429,38 @@ function Parser.ParseUnary(Self: Parser): Expression
 end
 
 function Parser.ParseExponent(Self: Parser): Expression
-    local Expression = Self:ParsePrimary()
+    local Expression = Self:ParseCall()
 
     while Self:Match(Token.Types.Karat) do
         local Operator = Self:Advance()
-        local Right = Self:ParsePrimary()
+        local Right = Self:ParseCall()
         Expression = Ast.BinaryExpression(Expression, Operator, Right)
+    end
+
+    return Expression
+end
+
+function Parser.ParseCall(Self: Parser): Expression
+    local Expression = Self:ParsePrimary()
+
+    while Self:Match(Token.Types.LeftParenthesis) do
+        Self:Advance()
+
+        local Arguments = {}
+
+        if not Self:Match(Token.Types.RightParenthesis) then
+            repeat
+                table.insert(Arguments, Self:ParseExpression())
+            until not (Self:Match(Token.Types.Comma) and Self:Advance())
+        end
+
+        if not Self:Match(Token.Types.RightParenthesis) then
+            Parser.Error(Self:PeekToken(), `Expected ')' to close function call`)
+        end
+
+        Self:Advance()
+
+        Expression = Ast.CallExpression(Expression, Arguments)
     end
 
     return Expression
