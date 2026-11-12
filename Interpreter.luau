@@ -24,11 +24,19 @@ type IfStatement = Ast.IfStatement
 type WhileStatement = Ast.WhileStatement
 type ForStatement = Ast.ForStatement
 type FunctionStatement = Ast.FunctionStatement
+type JumpStatement = Ast.JumpStatement
 type Statement = Ast.Statement
 
 type RuntimeError = {
+    Type: "RuntimeError",
     Token: Token,
     Message: string,
+}
+
+type Jump = {
+    Type: "Jump",
+    Keyword: Token,
+    Value: any,
 }
 
 local Interpreter = {}
@@ -71,10 +79,19 @@ function Interpreter.Run(Self: Interpreter, Statements: { Statement })
     end
 end
 
-function Interpreter.Error(Token: Token, Message: string): ()
+function Interpreter.Error(Token: Token, Message: string)
     error({
+        Type = "RuntimeError",
         Token = Token,
         Message = Message,
+    }, 0)
+end
+
+function Interpreter.Jump(Keyword: Token, Value: any)
+    error({
+        Type = "Jump",
+        Keyword = Keyword,
+        Value = Value,
     }, 0)
 end
 
@@ -104,40 +121,58 @@ end
 function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
     local Scope = Environment.New(Self.Environment)
     if Self:EvaluateExpression(Statement.Default.Condition) then
-        Self:EvaluateBlock(Statement.Default.Body, Scope)
+        local Jump = Self:EvaluateBlock(Statement.Default.Body, Scope)
+        if Jump then
+            Interpreter.Jump(Jump.Keyword, Jump.Value)
+        end
     else
         for _, Elseif in Statement.Elseif do
             if Self:EvaluateExpression(Elseif.Condition) then
-                Self:EvaluateBlock(Elseif.Body, Scope)
+                local Jump = Self:EvaluateBlock(Elseif.Body, Scope)
+                if Jump then
+                    Interpreter.Jump(Jump.Keyword, Jump.Value)
+                end
                 return
             end
         end
 
-        Self:EvaluateBlock(Statement.Else, Scope)
+        local Jump = Self:EvaluateBlock(Statement.Else, Scope)
+        if Jump then
+            Interpreter.Jump(Jump.Keyword, Jump.Value)
+        end
     end
 end
 
 function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileStatement)
     while Self:EvaluateExpression(Statement.Condition) do
         local Scope = Environment.New(Self.Environment)
-        Self:EvaluateBlock(Statement.Body, Scope)
+        local Jump = Self:EvaluateBlock(Statement.Body, Scope)
+        if Jump then
+            if Jump.Keyword.Type == Token.Types.Break then
+                break
+            elseif Jump.Keyword.Type == Token.Types.Continue then
+                continue
+            elseif Jump.Keyword.Type == Token.Types.Return then
+                Interpreter.Jump(Jump.Keyword, Jump.Value)
+            end
+        end
     end
 end
 
 function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForStatement)
     local CounterValue = Self:EvaluateExpression(Statement.Initial)
     if typeof(CounterValue) ~= "number" then
-        Interpreter.Error(Statement.Token, `Expected number for 'for' counter, got {typeof(CounterValue)}`)
+        Interpreter.Error(Statement.Keyword, `Expected number for 'for' counter, got {typeof(CounterValue)}`)
     end
 
     local Limit = Self:EvaluateExpression(Statement.Limit)
     if typeof(Limit) ~= "number" then
-        Interpreter.Error(Statement.Token, `Expected number for 'for' limit, got {typeof(Limit)}`)
+        Interpreter.Error(Statement.Keyword, `Expected number for 'for' limit, got {typeof(Limit)}`)
     end
 
     local Increment = Statement.Increment and Self:EvaluateExpression(Statement.Increment) or 1
     if typeof(Increment) ~= "number" then
-        Interpreter.Error(Statement.Token, `Expected number for 'for' increment, got {typeof(Increment)}`)
+        Interpreter.Error(Statement.Keyword, `Expected number for 'for' increment, got {typeof(Increment)}`)
     end
 
     local Direction = math.sign(Increment)
@@ -149,9 +184,19 @@ function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForState
 
         local Scope = Environment.New(Self.Environment)
         Scope:Define(Statement.Identifier.Lexeme, CounterValue)
-        Self:EvaluateBlock(Statement.Body, Scope)
-
+        local Jump = Self:EvaluateBlock(Statement.Body, Scope)
+        
         CounterValue += Increment
+
+        if Jump then
+            if Jump.Keyword.Type == Token.Types.Break then
+                break
+            elseif Jump.Keyword.Type == Token.Types.Continue then
+                continue
+            elseif Jump.Keyword.Type == Token.Types.Return then
+                Interpreter.Jump(Jump.Keyword, Jump.Value)
+            end
+        end
     end
 end
 
@@ -159,28 +204,57 @@ function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: Fun
     Self.Environment:Define(Statement.Identifier.Lexeme, Self:FunctionToValue(Statement.Parameters, Statement.Body))
 end
 
-function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment)
+function Interpreter.EvaluateJumpStatement(Self: Interpreter, Statement: JumpStatement)
+    local Value = Statement.Value and Self:EvaluateExpression(Statement.Value)
+    Interpreter.Jump(Statement.Keyword, Value)
+end
+
+function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment): Jump?
     local Outside = Self.Environment
     Self.Environment = Environment
 
-    for _, Statement in Statements do
-        Self:EvaluateStatement(Statement)
-    end
+    local Ok, Err: RuntimeError | Jump = xpcall(
+        function()
+            for _, Statement in Statements do
+                Self:EvaluateStatement(Statement)
+            end
+        end, 
+        function(Value)
+            return Value
+        end)
 
     Self.Environment = Outside
+
+    if not Ok then
+        if Err.Type == "Jump" then
+            return Err
+        elseif Err.Type == "RuntimeError" then
+            Interpreter.Error(Err.Token, Err.Message)
+        end
+    end
+
+    return nil
 end
 
-function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (any) -> ()
+function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (any) -> (any)
     local Outside = Environment.New(Self.Environment)
 
-    return function(Arguments: { any })
+    return function(Arguments: { any }): (any)
         local Scope = Environment.New(Outside)
 
         for i, Parameter in Parameters do
             Scope:Define(Parameter.Lexeme, Arguments[i])
         end
 
-        Self:EvaluateBlock(Body, Scope)
+        local Return = Self:EvaluateBlock(Body, Scope)
+
+        if Return then
+            if Return.Keyword.Type == Token.Types.Return then
+                return Return.Value
+            end
+        end
+
+        return nil
     end
 end
 
@@ -192,6 +266,7 @@ Interpreter.StatementMap = {
     WhileStatement = Interpreter.EvaluateWhileStatement,
     ForStatement = Interpreter.EvaluateForStatement,
     FunctionStatement = Interpreter.EvaluateFunctionStatement,
+    JumpStatement = Interpreter.EvaluateJumpStatement,
 } :: { [string]: (Self: Interpreter, Statement: Statement) -> () }
 
 ----------------------------

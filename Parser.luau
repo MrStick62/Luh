@@ -219,7 +219,7 @@ function Parser.ParseWhile(Self: Parser): Statement
 end
 
 function Parser.ParseFor(Self: Parser): Statement
-    local ForToken = Self:Advance()
+    local Keyword = Self:Advance()
 
     if not Self:Match(Token.Types.Identifier) then
         Parser.Error(Self:PeekToken(), `Expected identifier when parsing for loop, got '{Self:PeekToken().Lexeme}'`)
@@ -254,13 +254,13 @@ function Parser.ParseFor(Self: Parser): Statement
         Parser.Error(DoToken, `Expected 'do' when parsing for loop, got '{DoToken.Lexeme}'`)
     end
 
-    local Body = Self:ParseBlock(ForToken)
+    local Body = Self:ParseBlock(Keyword)
 
-    return Ast.ForStatement(ForToken, Identifier, Initial, Target, Increment, Body)
+    return Ast.ForStatement(Keyword, Identifier, Initial, Target, Increment, Body)
 end
 
 function Parser.ParseFun(Self: Parser): Statement
-    local FunctionToken = Self:Advance()
+    local Keyword = Self:Advance()
 
     if not Self:Match(Token.Types.Identifier) then
         Parser.Error(Self:PeekToken(), `Expected identifier when parsing function, got '{Self:PeekToken().Lexeme}'`)
@@ -269,9 +269,23 @@ function Parser.ParseFun(Self: Parser): Statement
     local Identifier = Self:Advance()
 
     local Parameters = Self:ParseParameters()
-    local Body = Self:ParseBlock(FunctionToken)
+    local Body = Self:ParseBlock(Keyword)
 
     return Ast.FunctionStatement(Identifier, Parameters, Body)
+end
+
+function Parser.ParseJump(Self: Parser): Statement
+    local Keyword = Self:Advance()
+
+    if Self:Match(Token.Types.End) then
+        return Ast.JumpStatement(Keyword)
+    end
+
+    if Keyword.Type ~= Token.Types.Return then
+        Parser.Error(Keyword, `Expected 'end' after {Keyword.Lexeme} statement`)
+    end
+
+    return Ast.JumpStatement(Keyword, Self:ParseExpression())
 end
 
 function Parser.ParseParameters(Self: Parser): { Token }
@@ -294,7 +308,7 @@ function Parser.ParseParameters(Self: Parser): { Token }
     end
 
     if not Self:Match(Token.Types.RightParenthesis) then
-        Parser.Error(Self:PeekToken(), `Expected ')' when parsing function, got {Self:PeekToken()}`)
+        Parser.Error(Self:PeekToken(), `Expected ')' when parsing function, got {Self:PeekToken().Lexeme}`)
     end
 
     Self:Advance()
@@ -309,6 +323,9 @@ Parser.StatementMap = {
     [Token.Types.While] = Parser.ParseWhile,
     [Token.Types.For] = Parser.ParseFor,
     [Token.Types.Fun] = Parser.ParseFun,
+    [Token.Types.Return] = Parser.ParseJump,
+    [Token.Types.Break] = Parser.ParseJump,
+    [Token.Types.Continue] = Parser.ParseJump,
 }
 
 function Parser.ParseExpression(Self: Parser): Expression

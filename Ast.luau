@@ -81,7 +81,7 @@ export type WhileStatement = {
 
 export type ForStatement = {
     Type: "ForStatement",
-    Token: Token,
+    Keyword: Token,
     Identifier: Token,
     Initial: Expression,
     Limit: Expression,
@@ -96,7 +96,13 @@ export type FunctionStatement = {
     Body: { Statement },
 }
 
-export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement | FunctionStatement
+export type JumpStatement = {
+    Type: "JumpStatement",
+    Keyword: Token,
+    Value: Expression?,
+}
+
+export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement | FunctionStatement | JumpStatement
 
 export type Ast = Expression
 
@@ -224,7 +230,7 @@ function Ast.ForStatement(Token: Token, Identifier: Token, Initial: Expression, 
     local Self = {} :: ForStatement
 
     Self.Type = "ForStatement"
-    Self.Token = Token
+    Self.Keyword = Token
     Self.Identifier = Identifier
     Self.Initial = Initial
     Self.Limit = Limit
@@ -241,6 +247,16 @@ function Ast.FunctionStatement(Identifier: Token, Parameters: { Token }, Body: {
     Self.Identifier = Identifier
     Self.Parameters = Parameters
     Self.Body = Body
+
+    return Self
+end
+
+function Ast.JumpStatement(Keyword: Token, Value: Expression?): JumpStatement
+    local Self = {} :: JumpStatement
+
+    Self.Type = "JumpStatement"
+    Self.Keyword = Keyword
+    Self.Value = Value
 
     return Self
 end

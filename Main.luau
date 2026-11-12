@@ -4,7 +4,11 @@ local Luh = require("./Luh")
 
 local Script = [[
 
-for i = 1, 10000 do
+for i = 1, 10 do
+    if i == 5 then
+        continue
+    end
+
     print(i)
 end
 

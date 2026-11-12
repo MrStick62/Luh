@@ -359,6 +359,7 @@ Lexer.ReadChar = {
 Lexer.Keywords = {
     ["and"] = Token.Types.And,
     ["break"] = Token.Types.Break,
+    ["continue"] = Token.Types.Continue,
     ["do"] = Token.Types.Do,
     ["else"] = Token.Types.Else,
     ["elseif"] = Token.Types.Elseif,
