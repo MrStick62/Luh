@@ -32,11 +32,18 @@ export type AssignmentExpression = {
 
 export type CallExpression = {
     Type: "CallExpression",
+    Token: Token,
     Function: Expression,
     Arguments: { Expression },
 }
 
-export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression
+export type FunctionExpression = {
+    Type: "FunctionExpression",
+    Parameters: { Token },
+    Body: { Statement },
+}
+
+export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression | FunctionExpression
 
 export type ExpressionStatement = {
     Type: "ExpressionStatement",
@@ -134,12 +141,23 @@ function Ast.AssignmentExpression(Identifier: Token, Operator: Token, Expression
     return Self
 end
 
-function Ast.CallExpression(Function: Expression, Arguments: { Expression }): CallExpression
+function Ast.CallExpression(Token: Token, Function: Expression, Arguments: { Expression }): CallExpression
     local Self = {} :: CallExpression
 
     Self.Type = "CallExpression"
+    Self.Token = Token
     Self.Function = Function
     Self.Arguments = Arguments
+
+    return Self
+end
+
+function Ast.FunctionExpression(Parameters: { Token }, Body: { Statement }): FunctionExpression
+    local Self = {} :: FunctionExpression
+
+    Self.Type = "FunctionExpression"
+    Self.Parameters = Parameters
+    Self.Body = Body
 
     return Self
 end

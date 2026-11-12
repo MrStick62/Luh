@@ -4,12 +4,17 @@ local Luh = require("./Luh")
 
 local Script = [[
 
-fun Hello(x, y)
-    x
-    y
+do
+    var z = "Earth!"
+
+    var Hello = fun(x, y)
+        x(z)
+    end
 end
 
-Hello(1, "Fried")
+Hello(fun(x)
+    "Hello, " .. x
+end, "World!")
 
 ]]
 

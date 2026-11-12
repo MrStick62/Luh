@@ -14,6 +14,7 @@ type BinaryExpression = Ast.BinaryExpression
 type UnaryExpression = Ast.UnaryExpression
 type AssignmentExpression = Ast.AssignmentExpression
 type CallExpression = Ast.CallExpression
+type FunctionExpression = Ast.FunctionExpression
 type Expression = Ast.Expression
 
 type ExpressionStatement = Ast.ExpressionStatement
@@ -222,7 +223,7 @@ function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallE
     local Function = Self:EvaluateExpression(Expression.Function)
 
     if typeof(Function) ~= "function" then
-        Interpreter.Error(Function, `Attempt to call a {typeof(Function)}`)
+        Interpreter.Error(Expression.Token, `Attempt to call a {typeof(Function)} value`)
     end
 
     local Arguments = {}
@@ -232,6 +233,10 @@ function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallE
     end
 
     return Function(Arguments)
+end
+
+function Interpreter.EvaluateFunctionExpression(Self: Interpreter, Expression: FunctionExpression): any
+    return Self:FunctionToValue(Expression.Parameters, Expression.Body)
 end
 
 Interpreter.BinaryFunctions = {
@@ -540,6 +545,7 @@ Interpreter.ExpressionMap = {
     BinaryExpression = Interpreter.EvaluateBinaryExpression,
     AssignmentExpression = Interpreter.EvaluateAssignmentExpression,
     CallExpression = Interpreter.EvaluateCallExpression,
+    FunctionExpression = Interpreter.EvaluateFunctionExpression,
 } :: { [string]: (Self: Interpreter, Expression: Expression) -> any }
 
 return Interpreter

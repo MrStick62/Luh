@@ -261,6 +261,13 @@ function Parser.ParseFun(Self: Parser): Statement
 
     local Identifier = Self:Advance()
 
+    local Parameters = Self:ParseParameters()
+    local Body = Self:ParseBlock(FunctionToken)
+
+    return Ast.FunctionStatement(Identifier, Parameters, Body)
+end
+
+function Parser.ParseParameters(Self: Parser): { Token }
     if not Self:Match(Token.Types.LeftParenthesis) then
         Parser.Error(Self:PeekToken(), `Expected '(' when parsing function, got '{Self:PeekToken().Lexeme}'`) 
     end
@@ -280,14 +287,12 @@ function Parser.ParseFun(Self: Parser): Statement
     end
 
     if not Self:Match(Token.Types.RightParenthesis) then
-        Parser.Error(FunctionToken, `Expected ')' when parsing function,`)
+        Parser.Error(Self:PeekToken(), `Expected ')' when parsing function, got {Self:PeekToken()}`)
     end
 
     Self:Advance()
 
-    local Body = Self:ParseBlock(FunctionToken)
-
-    return Ast.FunctionStatement(Identifier, Parameters, Body)
+    return Parameters
 end
 
 Parser.StatementMap = {
@@ -444,7 +449,7 @@ function Parser.ParseCall(Self: Parser): Expression
     local Expression = Self:ParsePrimary()
 
     while Self:Match(Token.Types.LeftParenthesis) do
-        Self:Advance()
+        local OpenToken = Self:Advance()
 
         local Arguments = {}
 
@@ -460,7 +465,7 @@ function Parser.ParseCall(Self: Parser): Expression
 
         Self:Advance()
 
-        Expression = Ast.CallExpression(Expression, Arguments)
+        Expression = Ast.CallExpression(OpenToken, Expression, Arguments)
     end
 
     return Expression
@@ -480,6 +485,15 @@ function Parser.ParsePrimary(Self: Parser): Expression
         end
 
         return Expression
+    end
+
+    if Self:Match(Token.Types.Fun) then
+        local FunToken = Self:Advance()
+
+        local Parameters = Self:ParseParameters()
+        local Body = Self:ParseBlock(FunToken)
+
+        return Ast.FunctionExpression(Parameters, Body)
     end
 
     if not Self:Match(Token.Types.Identifier, Token.Types.Number, Token.Types.String, Token.Types.Nil, Token.Types.True, Token.Types.False) then
