@@ -106,7 +106,14 @@ function Parser.ParseStatement(Self: Parser): Statement
         return Statement(Self)
     end
 
-    return Ast.ExpressionStatement(Self:ParseExpression())
+    local StartToken = Self:PeekToken()
+    local Expression = Self:ParseExpression()
+
+    if Expression.Type ~= "AssignmentExpression" and Expression.Type ~= "CallExpression" then
+        Parser.Error(StartToken, `Statement expected, got '{StartToken.Lexeme}'`)
+    end
+
+    return Ast.ExpressionStatement(Expression)
 end
 
 function Parser.ParseVar(Self: Parser): Statement

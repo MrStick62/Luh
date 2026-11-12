@@ -3,11 +3,8 @@
 local Environment = {}
 Environment.__index = Environment
 
-
-
 type EnvironmentData = {
     Values: { [string]: { Value: any } },
-    Outside: Environment?,
 }
 
 export type Environment = typeof(setmetatable({} :: EnvironmentData, Environment))
@@ -16,7 +13,12 @@ function Environment.New(Outside: Environment?): Environment
     local Self = {}
 
     Self.Values = {}
-    Self.Outside = Outside
+
+    if Outside then
+        for Index, Value in Outside.Values do
+            Self.Values[Index] = Value
+        end
+    end
 
     return setmetatable(Self, Environment)
 end
@@ -27,16 +29,16 @@ end
 
 function Environment.Assign(Self: Environment, Identifier: string, Value: any): boolean
     if Self.Values[Identifier] then
-        Self.Values[Identifier] = { Value = Value }
+        Self.Values[Identifier].Value = Value
         return true
     end
 
-    return Self.Outside ~= nil and Self.Outside:Assign(Identifier, Value)
+    return false
 end
 
 function Environment.Get(Self: Environment, Identifier: string): any
     local Value = Self.Values[Identifier]
-    return Value ~= nil and Value.Value or Self.Outside and Self.Outside:Get(Identifier)
+    return Value and Value.Value
 end
 
 return Environment

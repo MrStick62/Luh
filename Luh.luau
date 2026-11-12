@@ -7,6 +7,7 @@ local Error = require("./Error")
 local Lexer = require("./Lexer")
 local Parser = require("./Parser")
 local Interpreter = require("./Interpreter")
+local Globals = require("./Globals")
 
 local Luh = {}
 
@@ -24,12 +25,6 @@ function Luh.Run(Source: string)
     local SourceLexer = Lexer.New(Source)
     local Tokens = SourceLexer:ScanTokens()
 
-    --[[
-    for _, Token in SourceLexer:ScanTokens() do
-        print(Token.Lexeme)
-    end
-    ]]
-
     if Error.ShouldHalt then
         return
     end
@@ -42,6 +37,9 @@ function Luh.Run(Source: string)
     end
 
     local TreeInterpreter = Interpreter.New()
+
+    Globals.Load(TreeInterpreter)
+
     TreeInterpreter:Run(Expression)
 end
 

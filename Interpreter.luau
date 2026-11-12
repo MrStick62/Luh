@@ -35,6 +35,7 @@ local Interpreter = {}
 Interpreter.__index = Interpreter
 
 type InterpreterData = {
+    GlobalEnvironment: Environment,
     Environment: Environment,
 }
 
@@ -43,9 +44,14 @@ export type Interpreter = typeof(setmetatable({} :: InterpreterData, Interpreter
 function Interpreter.New(): Interpreter
     local Self = {}
 
-    Self.Environment = Environment.New()
+    Self.GlobalEnvironment = Environment.New()
+    Self.Environment = Self.GlobalEnvironment
 
     return setmetatable(Self, Interpreter)
+end
+
+function Interpreter.LoadGlobal(Self: Interpreter, Identifier: string, Value: any)
+    Self.GlobalEnvironment:Define(Identifier, Value)
 end
 
 function Interpreter.Run(Self: Interpreter, Statements: { Statement })
@@ -82,7 +88,7 @@ function Interpreter.EvaluateStatement(Self: Interpreter, Statement: Statement):
 end
 
 function Interpreter.EvaluateExpressionStatement(Self: Interpreter, Statement: ExpressionStatement)
-    print(`{Self:EvaluateExpression(Statement.Expression)}`)
+    Self:EvaluateExpression(Statement.Expression)
 end
 
 function Interpreter.EvaluateVariableStatement(Self: Interpreter, Statement: VariableStatement)
@@ -165,7 +171,7 @@ function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement },
 end
 
 function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (any) -> ()
-    local Outside = Self.Environment
+    local Outside = Environment.New(Self.Environment)
 
     return function(Arguments: { any })
         local Scope = Environment.New(Outside)
