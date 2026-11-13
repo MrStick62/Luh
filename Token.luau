@@ -37,6 +37,7 @@ Token.Types = {
     Minus = string.byte('-'),
     Dot = string.byte('.'),
     Slash = string.byte('/'),
+    Colon = string.byte(':'),
     Less = string.byte('<'),
     Equals = string.byte('='),
     Greater = string.byte('>'),

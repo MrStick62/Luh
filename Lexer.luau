@@ -181,6 +181,10 @@ Lexer.ReadChar = {
 
         Self:AddToken(Token.Types.Dot)
     end,
+    [':'] = function(Self: Lexer)
+        Self:Consume()
+        Self:AddToken(Token.Types.Colon)
+    end,
     ['+'] = function(Self: Lexer) 
         Self:Consume()
 
