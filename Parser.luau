@@ -341,12 +341,17 @@ function Parser.ParseAssignmentExpression(Self: Parser): Expression
 
         local Operator = Self:Advance()
 
-        if Expression.Type ~= "LiteralExpression" or Expression.Value.Type ~= Token.Types.Identifier then
+        if Expression.Type == "LiteralExpression" then
+            if Expression.Value.Type ~= Token.Types.Identifier then
+                Parser.Error(Expression.Value, `Attempt to assign non-identifier literal`)
+            end
+        elseif Expression.Type ~= "GetExpression" then
+            Parser.Error(Operator, `Attempt to assign non-identifier value`)
             return Expression
         end
 
         local Right = Self:ParseAssignmentExpression()
-        return Ast.AssignmentExpression(Expression.Value, Operator, Right)
+        return Ast.AssignmentExpression(Expression, Operator, Right)
     end
 
     return Expression
@@ -472,24 +477,38 @@ end
 function Parser.ParseCall(Self: Parser): Expression
     local Expression = Self:ParsePrimary()
 
-    while Self:Match(Token.Types.LeftParenthesis) do
-        local OpenToken = Self:Advance()
+    while true do
+        if Self:Match(Token.Types.LeftParenthesis) then
+            local OpenToken = Self:Advance()
 
-        local Arguments = {}
+            local Arguments = {}
 
-        if not Self:Match(Token.Types.RightParenthesis) then
-            repeat
-                table.insert(Arguments, Self:ParseExpression())
-            until not (Self:Match(Token.Types.Comma) and Self:Advance())
+            if not Self:Match(Token.Types.RightParenthesis) then
+                repeat
+                    table.insert(Arguments, Self:ParseExpression())
+                until not (Self:Match(Token.Types.Comma) and Self:Advance())
+            end
+
+            if not Self:Match(Token.Types.RightParenthesis) then
+                Parser.Error(Self:PeekToken(), `Expected ')' to close function call`)
+            end
+
+            Self:Advance()
+
+            Expression = Ast.CallExpression(OpenToken, Expression, Arguments)
+        elseif Self:Match(Token.Types.Dot) then
+            local Operator = Self:Advance()
+
+            if not Self:Match(Token.Types.Identifier) then
+                Parser.Error(Self:PeekToken(), `Invalid literal index '{Self:PeekToken().Lexeme}'`)
+            end
+
+            local Name = Self:Advance()
+
+            Expression = Ast.GetExpression(Expression, Operator, Name)
+        else
+            break
         end
-
-        if not Self:Match(Token.Types.RightParenthesis) then
-            Parser.Error(Self:PeekToken(), `Expected ')' to close function call`)
-        end
-
-        Self:Advance()
-
-        Expression = Ast.CallExpression(OpenToken, Expression, Arguments)
     end
 
     return Expression

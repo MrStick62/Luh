@@ -25,9 +25,9 @@ export type UnaryExpression = {
 
 export type AssignmentExpression = {
     Type: "AssignmentExpression",
-    Identifier: Token,
+    Left: Expression,
     Operator: Token,
-    Expression: Expression,
+    Right: Expression,
 }
 
 export type CallExpression = {
@@ -43,7 +43,14 @@ export type FunctionExpression = {
     Body: { Statement },
 }
 
-export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression | FunctionExpression
+export type GetExpression = {
+    Type: "GetExpression",
+    Left: Expression,
+    Operator: Token,
+    Name: Token,
+}
+
+export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression | FunctionExpression | GetExpression
 
 export type ExpressionStatement = {
     Type: "ExpressionStatement",
@@ -136,13 +143,13 @@ function Ast.UnaryExpression(Operator: Token, Expression: Expression): UnaryExpr
     return Self
 end
 
-function Ast.AssignmentExpression(Identifier: Token, Operator: Token, Expression: Expression): AssignmentExpression
+function Ast.AssignmentExpression(Left: Expression, Operator: Token, Right: Expression): AssignmentExpression
     local Self = {} :: AssignmentExpression
 
     Self.Type = "AssignmentExpression"
-    Self.Identifier = Identifier
+    Self.Left = Left
     Self.Operator = Operator
-    Self.Expression = Expression
+    Self.Right = Right
 
     return Self
 end
@@ -154,6 +161,17 @@ function Ast.CallExpression(Token: Token, Function: Expression, Arguments: { Exp
     Self.Token = Token
     Self.Function = Function
     Self.Arguments = Arguments
+
+    return Self
+end
+
+function Ast.GetExpression(Left: Expression, Operator: Token, Name: Token): GetExpression
+    local Self = {} :: GetExpression
+
+    Self.Type = "GetExpression"
+    Self.Left = Left
+    Self.Operator = Operator
+    Self.Name = Name
 
     return Self
 end

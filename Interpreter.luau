@@ -2,6 +2,9 @@
 
 local Error = require("./Error")
 
+local Reference = require("./Reference")
+type Reference = Reference.Reference
+
 local Environment = require("./Environment")
 type Environment = Environment.Environment
 
@@ -9,11 +12,13 @@ local Token = require("./Token")
 type Token = Token.Token
 
 local Ast = require("./Ast")
+
 type LiteralExpression = Ast.LiteralExpression
 type BinaryExpression = Ast.BinaryExpression
 type UnaryExpression = Ast.UnaryExpression
 type AssignmentExpression = Ast.AssignmentExpression
 type CallExpression = Ast.CallExpression
+type GetExpression = Ast.GetExpression
 type FunctionExpression = Ast.FunctionExpression
 type Expression = Ast.Expression
 
@@ -118,7 +123,7 @@ function Interpreter.EvaluateExpressionStatement(Self: Interpreter, Statement: E
 end
 
 function Interpreter.EvaluateVariableStatement(Self: Interpreter, Statement: VariableStatement)
-    local Value = Statement.Initializer and Self:EvaluateExpression(Statement.Initializer)
+    local Value = Statement.Initializer and Self:EvaluateExpression(Statement.Initializer):Get()
     Self.Environment:Define(Statement.Identifier.Lexeme, Value)
 end
 
@@ -129,11 +134,11 @@ end
 
 function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
     local Scope = Environment.New(Self.Environment)
-    if Self:EvaluateExpression(Statement.Default.Condition) then
+    if Self:EvaluateExpression(Statement.Default.Condition):Get() then
         Self:EvaluateBlock(Statement.Default.Body, Scope)
     else
         for _, Elseif in Statement.Elseif do
-            if Self:EvaluateExpression(Elseif.Condition) then
+            if Self:EvaluateExpression(Elseif.Condition):Get() then
                 Self:EvaluateBlock(Elseif.Body, Scope)
                 return
             end
@@ -144,7 +149,7 @@ function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStateme
 end
 
 function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileStatement)
-    while Self:EvaluateExpression(Statement.Condition) do
+    while Self:EvaluateExpression(Statement.Condition):Get() do
         local Scope = Environment.New(Self.Environment)
         local Jump = Self:CatchJump(Statement.Body, Scope)
         if Jump then
@@ -160,17 +165,17 @@ function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileS
 end
 
 function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForStatement)
-    local CounterValue = Self:EvaluateExpression(Statement.Initial)
+    local CounterValue = Self:EvaluateExpression(Statement.Initial):Get()
     if typeof(CounterValue) ~= "number" then
         Interpreter.Error(Statement.Keyword, `Expected number for 'for' counter, got {typeof(CounterValue)}`)
     end
 
-    local Limit = Self:EvaluateExpression(Statement.Limit)
+    local Limit = Self:EvaluateExpression(Statement.Limit):Get()
     if typeof(Limit) ~= "number" then
         Interpreter.Error(Statement.Keyword, `Expected number for 'for' limit, got {typeof(Limit)}`)
     end
 
-    local Increment = Statement.Increment and Self:EvaluateExpression(Statement.Increment) or 1
+    local Increment = Statement.Increment and Self:EvaluateExpression(Statement.Increment):Get() or 1
     if typeof(Increment) ~= "number" then
         Interpreter.Error(Statement.Keyword, `Expected number for 'for' increment, got {typeof(Increment)}`)
     end
@@ -205,7 +210,7 @@ function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: Fun
 end
 
 function Interpreter.EvaluateJumpStatement(Self: Interpreter, Statement: JumpStatement)
-    local Value = Statement.Value and Self:EvaluateExpression(Statement.Value)
+    local Value = Statement.Value and Self:EvaluateExpression(Statement.Value):Get()
     Interpreter.Jump(Statement.Keyword, Value)
 end
 
@@ -281,35 +286,36 @@ Interpreter.StatementMap = {
 -- Evaluating Expressions --
 ----------------------------
 
-function Interpreter.EvaluateExpression(Self: Interpreter, Expression: Expression): any
+function Interpreter.EvaluateExpression(Self: Interpreter, Expression: Expression): Reference
     local Function = Interpreter.ExpressionMap[Expression.Type]
     return Function and Function(Self, Expression)
 end
 
-function Interpreter.EvaluateBinaryExpression(Self: Interpreter, Expression: BinaryExpression): any
+function Interpreter.EvaluateBinaryExpression(Self: Interpreter, Expression: BinaryExpression): Reference
     local BinaryFunction = Interpreter.BinaryFunctions[Expression.Operator.Type]
-    local Left = Self:EvaluateExpression(Expression.Left)
-    return BinaryFunction and BinaryFunction(Self, Expression.Operator, Left, Expression.Right)
+    local Left = Self:EvaluateExpression(Expression.Left):Get()
+    return BinaryFunction and Reference.New(BinaryFunction(Self, Expression.Operator, Left, Expression.Right))
 end
 
-function Interpreter.EvaluateUnaryExpression(Self: Interpreter, Expression: UnaryExpression): any
+function Interpreter.EvaluateUnaryExpression(Self: Interpreter, Expression: UnaryExpression): Reference
     local UnaryFunction = Interpreter.UnaryFunctions[Expression.Operator.Type]
-    return UnaryFunction and UnaryFunction(Self, Expression.Operator, Self:EvaluateExpression(Expression.Expression))
+    return UnaryFunction and Reference.New(UnaryFunction(Self, Expression.Operator, Self:EvaluateExpression(Expression.Expression):Get()))
 end
 
-function Interpreter.EvaluateAssignmentExpression(Self: Interpreter, Expression: AssignmentExpression): any
+function Interpreter.EvaluateAssignmentExpression(Self: Interpreter, Expression: AssignmentExpression): Reference
     local AssignmentFunction = Interpreter.AssignmentFunctions[Expression.Operator.Type]
-    local Right = Self:EvaluateExpression(Expression.Expression)
-    return AssignmentFunction and AssignmentFunction(Self, Expression.Identifier, Expression.Operator, Right)
+    local Left = Self:EvaluateExpression(Expression.Left)
+    local Right = Self:EvaluateExpression(Expression.Right):Get()
+    return AssignmentFunction and Reference.New(AssignmentFunction(Self, Left, Expression.Operator, Right))
 end
 
-function Interpreter.EvaluateLiteralExpression(Self: Interpreter, Expression: LiteralExpression): any
+function Interpreter.EvaluateLiteralExpression(Self: Interpreter, Expression: LiteralExpression): Reference
     local Evaluation = Interpreter.LiteralEvaluations[Expression.Value.Type]
-    return Evaluation and Evaluation(Self, Expression.Value.Lexeme)
+    return Evaluation and Evaluation(Self, Expression.Value)
 end
 
-function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallExpression): any
-    local Function = Self:EvaluateExpression(Expression.Function)
+function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallExpression): Reference
+    local Function = Self:EvaluateExpression(Expression.Function):Get()
 
     if typeof(Function) ~= "function" then
         Interpreter.Error(Expression.Token, `Attempt to call a {typeof(Function)} value`)
@@ -318,160 +324,160 @@ function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallE
     local Arguments = {}
 
     for _, Argument in Expression.Arguments do
-        table.insert(Arguments, Self:EvaluateExpression(Argument))
+        table.insert(Arguments, Self:EvaluateExpression(Argument):Get())
     end
 
-    return Function(Arguments)
+    return Reference.New(Function(Arguments))
 end
 
-function Interpreter.EvaluateFunctionExpression(Self: Interpreter, Expression: FunctionExpression): any
-    return Self:FunctionToValue(Expression.Parameters, Expression.Body)
+function Interpreter.EvaluateGetExpression(Self: Interpreter, Expression: GetExpression): Reference
+    local Table = Self:EvaluateExpression(Expression.Left):Get()
+
+    if typeof(Table) ~= "table" then
+        Interpreter.Error(Expression.Operator, `Attempt to index {typeof(Table)} with '{Expression.Name.Lexeme}'`)
+    end
+
+    return Reference.FromTable(Table, Expression.Name.Lexeme)
+end
+
+function Interpreter.EvaluateFunctionExpression(Self: Interpreter, Expression: FunctionExpression): Reference
+    return Reference.New(Self:FunctionToValue(Expression.Parameters, Expression.Body))
 end
 
 Interpreter.BinaryFunctions = {
     [Token.Types.Plus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         -- Why am I manually passing self only here? Try fixing it. See what kind of wrath the Luau Language Server inflicts upon you. God help us all.
-        local Right = Interpreter.EvaluateExpression(Self, RightExpr)
+        local Right = Interpreter.EvaluateExpression(Self, RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left + Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
         end
-
-        Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
-        return nil
+        
+        return Left + Right
     end,
     [Token.Types.Minus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left - Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)            
         end
 
-        Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)
-        return nil
+        return Left - Right
     end,
     [Token.Types.Star] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left * Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)            
         end
 
-        Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)
-        return nil
+        return Left * Right
     end,
     [Token.Types.Slash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left / Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)            
         end
 
-        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
-        return nil
+        return Left / Right
     end,
     [Token.Types.DoubleSlash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
         
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left // Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)            
         end
 
-        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
-        return nil
+        return Left // Right
     end,
     [Token.Types.Modulo] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left % Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)            
         end
 
-        Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)
-        return nil
+        return Left % Right
     end,
     [Token.Types.Karat] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
-            return Left ^ Right
+            Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
         end
 
-        Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
-        return nil
+        return Left ^ Right
     end,
     [Token.Types.DoubleDot] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         return tostring(Left) .. tostring(Right)
     end,
     [Token.Types.And] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left and Self:EvaluateExpression(RightExpr)
+        return Left and Self:EvaluateExpression(RightExpr):Get()
     end,
     [Token.Types.Or] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left or Self:EvaluateExpression(RightExpr)
+        return Left or Self:EvaluateExpression(RightExpr):Get()
     end,
     [Token.Types.Xor] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         return not Left and Right or not Right and Left or (Left ~= Right or Left ~= true and Left ~= false) and nil
     end,
     [Token.Types.Equal] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left == Self:EvaluateExpression(RightExpr)
+        return Left == Self:EvaluateExpression(RightExpr):Get()
     end,
     [Token.Types.NotEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left ~= Self:EvaluateExpression(RightExpr)
+        return Left ~= Self:EvaluateExpression(RightExpr):Get()
     end,
     [Token.Types.Greater] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left > Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
+            
         end
 
-        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
-        return nil
+        return Left > Right
     end,
     [Token.Types.GreaterEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left >= Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
         end
 
-        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
-        return nil
+        return Left >= Right
     end,
     [Token.Types.Less] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left < Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)    
         end
 
-        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
-        return nil
+        return Left < Right
     end,
     [Token.Types.LessEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr)
+        local Right = Self:EvaluateExpression(RightExpr):Get()
         
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left <= Right
+        if LeftType ~= "number" or RightType ~= "number" then
+            Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
         end
-
-        Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
-        return nil
+        
+        return Left <= Right
     end,
 } :: { [number]: (Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression) -> any }
 
@@ -500,127 +506,146 @@ Interpreter.UnaryFunctions = {
 } :: { [number]: (Self: Interpreter, Operator: Token, Value: any) -> any }
 
 Interpreter.AssignmentFunctions = {
-    [Token.Types.Equals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        if Self.Environment:Assign(Identifier.Lexeme, Value) then
-            return Value
+    [Token.Types.Equals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        if not Left:Set(Value) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
         end
-
-        Interpreter.Error(Identifier, `Unknown identifier '{Identifier.Lexeme}'`)
-        return nil
+        
+        return Left
     end,
-    [Token.Types.PlusEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.PlusEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
-            return nil
         end
         
-        local Result = Left + Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue + Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-    [Token.Types.MinusEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.MinusEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)
-            return nil
         end
         
-        local Result = Left - Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue - Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-    [Token.Types.StarEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.StarEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)
-            return nil
         end
         
-        local Result = Left * Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue * Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-    [Token.Types.SlashEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.SlashEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
-            return nil
         end
         
-        local Result = Left / Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue / Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-    [Token.Types.DoubleSlashEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.DoubleSlashEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
-            return nil
         end
         
-        local Result = Left // Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue // Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-    [Token.Types.ModuloEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.ModuloEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to calculate the remainder of {LeftType} and {RightType}`)
-            return nil
+            Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)
         end
         
-        local Result = Left % Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue % Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-    [Token.Types.KaratEquals] = function(Self: Interpreter, Identifier: Token, Operator: Token, Value: any): any
-        local Left = Self.Environment:Get(Identifier.Lexeme)
+    [Token.Types.KaratEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
+        local LeftValue = Left:Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Value)
+        local LeftType, RightType = typeof(LeftValue), typeof(Value)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
-            return nil
         end
         
-        local Result = Left ^ Value
-        Self.Environment:Assign(Identifier.Lexeme, Result)
+        local Result = LeftValue ^ Value
+        if not Left:Set(Result) then
+            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
+        end
+
         return Result
     end,
-} :: { [number]: (Self: Interpreter, Identifier: Token, Operator: Token, Value: any) -> any }
+} :: { [number]: (Self: Interpreter, Identifier: Reference, Operator: Token, Value: any) -> any }
 
 Interpreter.LiteralEvaluations = {
-    [Token.Types.Number] = function(Self: Interpreter, Lexeme: string): any
-        return tonumber(Lexeme)
+    [Token.Types.Number] = function(Self: Interpreter, Token: Token): Reference
+        return Reference.New(tonumber(Token.Lexeme))
     end,
-    [Token.Types.Identifier] = function(Self: Interpreter, Lexeme: string): any
-        return Self.Environment:Get(Lexeme)
+    [Token.Types.Identifier] = function(Self: Interpreter, Token: Token): Reference
+        local Result = Self.Environment:Find(Token.Lexeme)
+
+        if not Result then
+            Interpreter.Error(Token, `Attempt to access undefined variable '{Token.Lexeme}'`)
+        end
+
+        return Result or Reference.New(nil)
     end,
-    [Token.Types.String] = function(Self: Interpreter, Lexeme: string): any
-        return Lexeme
+    [Token.Types.String] = function(Self: Interpreter, Token: Token): Reference
+        return Reference.New(Token.Lexeme)
     end,
-    [Token.Types.True] = function(Self: Interpreter, Lexeme: string): any
-        return true
+    [Token.Types.True] = function(Self: Interpreter, Token: Token): Reference
+        return Reference.New(true)
     end,
-    [Token.Types.False] = function(Self: Interpreter, Lexeme: string): any
-        return false
+    [Token.Types.False] = function(Self: Interpreter, Token: Token): Reference
+        return Reference.New(false)
     end,
-    [Token.Types.Nil] = function(Self: Interpreter, Lexeme: string): any
-        return nil
+    [Token.Types.Nil] = function(Self: Interpreter, Token: Token): Reference
+        return Reference.New(nil)
     end,
-} :: { [number]: (Self: Interpreter, Lexeme: string) -> any }
+} :: { [number]: (Self: Interpreter, Token: Token) -> Reference }
 
 Interpreter.ExpressionMap = {
     LiteralExpression = Interpreter.EvaluateLiteralExpression,
@@ -628,6 +653,7 @@ Interpreter.ExpressionMap = {
     BinaryExpression = Interpreter.EvaluateBinaryExpression,
     AssignmentExpression = Interpreter.EvaluateAssignmentExpression,
     CallExpression = Interpreter.EvaluateCallExpression,
+    GetExpression = Interpreter.EvaluateGetExpression,
     FunctionExpression = Interpreter.EvaluateFunctionExpression,
 } :: { [string]: (Self: Interpreter, Expression: Expression) -> any }
 

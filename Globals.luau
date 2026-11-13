@@ -18,6 +18,12 @@ function Globals.Load(Interpreter: Interpreter)
         function(Arguments: { any }) 
             return tostring(Arguments[1])
         end
-    )end
+    )
+
+    Interpreter:LoadGlobal(
+        "table",
+        { hehe = "Hello, World!" }
+    )
+end
 
 return Globals
