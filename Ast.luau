@@ -37,10 +37,12 @@ export type CallExpression = {
     Arguments: { Expression },
 }
 
-export type FunctionExpression = {
-    Type: "FunctionExpression",
-    Parameters: { Token },
-    Body: { Statement },
+export type SelfCallExpression = {
+    Type: "SelfCallExpression",
+    Left: Expression,
+    Operator: Token,
+    Name: Token,
+    Arguments: { Expression }
 }
 
 export type GetExpression = {
@@ -50,7 +52,25 @@ export type GetExpression = {
     Name: Token,
 }
 
-export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression | FunctionExpression | GetExpression
+export type IndexExpression = {
+    Type: "IndexExpression",
+    Left: Expression,
+    Operator: Token,
+    Index: Expression,
+}
+
+export type FunctionExpression = {
+    Type: "FunctionExpression",
+    Parameters: { Token },
+    Body: { Statement },
+}
+
+export type TableExpression = {
+    Type: "TableExpression",
+    Elements: { { Key: Expression?, Value: Expression } }
+}
+
+export type Expression = LiteralExpression | BinaryExpression | UnaryExpression | AssignmentExpression | CallExpression | SelfCallExpression | GetExpression | IndexExpression | FunctionExpression | TableExpression
 
 export type ExpressionStatement = {
     Type: "ExpressionStatement",
@@ -98,7 +118,7 @@ export type ForStatement = {
 
 export type FunctionStatement = {
     Type: "FunctionStatement",
-    Identifier: Token,
+    Identifiers: { Token },
     Parameters: { Token },
     Body: { Statement },
 }
@@ -165,6 +185,18 @@ function Ast.CallExpression(Token: Token, Function: Expression, Arguments: { Exp
     return Self
 end
 
+function Ast.SelfCallExpression(Left: Expression, Operator: Token, Name: Token, Arguments: { Expression }): SelfCallExpression
+    local Self = {} :: SelfCallExpression
+
+    Self.Type = "SelfCallExpression"
+    Self.Left = Left
+    Self.Operator = Operator
+    Self.Name = Name
+    Self.Arguments = Arguments
+
+    return Self
+end
+
 function Ast.GetExpression(Left: Expression, Operator: Token, Name: Token): GetExpression
     local Self = {} :: GetExpression
 
@@ -176,12 +208,32 @@ function Ast.GetExpression(Left: Expression, Operator: Token, Name: Token): GetE
     return Self
 end
 
+function Ast.IndexExpression(Left: Expression, Operator: Token, Index: Expression): IndexExpression
+    local Self = {} :: IndexExpression
+
+    Self.Type = "IndexExpression"
+    Self.Left = Left
+    Self.Operator = Operator
+    Self.Index = Index
+
+    return Self
+end
+
 function Ast.FunctionExpression(Parameters: { Token }, Body: { Statement }): FunctionExpression
     local Self = {} :: FunctionExpression
 
     Self.Type = "FunctionExpression"
     Self.Parameters = Parameters
     Self.Body = Body
+
+    return Self
+end
+
+function Ast.TableExpression(Elements: { { Key: Expression?, Value: Expression } }): TableExpression
+    local Self = {} :: TableExpression
+
+    Self.Type = "TableExpression"
+    Self.Elements = Elements
 
     return Self
 end
@@ -258,11 +310,11 @@ function Ast.ForStatement(Token: Token, Identifier: Token, Initial: Expression, 
     return Self
 end
 
-function Ast.FunctionStatement(Identifier: Token, Parameters: { Token }, Body: { Statement }): FunctionStatement
+function Ast.FunctionStatement(Identifiers: { Token }, Parameters: { Token }, Body: { Statement }): FunctionStatement
     local Self = {} :: FunctionStatement
 
     Self.Type = "FunctionStatement"
-    Self.Identifier = Identifier
+    Self.Identifiers = Identifiers
     Self.Parameters = Parameters
     Self.Body = Body
 

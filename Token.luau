@@ -28,6 +28,7 @@ Token.Types = {
     EOF = 0,
 
     -- Character values
+    Hash = string.byte('#'),
     Modulo = string.byte('%'),
     LeftParenthesis = string.byte('('),
     RightParenthesis = string.byte(')'),
@@ -41,6 +42,8 @@ Token.Types = {
     Less = string.byte('<'),
     Equals = string.byte('='),
     Greater = string.byte('>'),
+    LeftSquareBracket = string.byte('['),
+    RightSquareBracket = string.byte(']'),
     Karat = string.byte('^'),
     LeftBrace = string.byte('{'),
     RightBrace = string.byte('}'),

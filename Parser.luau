@@ -167,7 +167,7 @@ function Parser.ParseIf(Self: Parser): Statement
 
     local Body = {}
     local ElseIf = {}
-    local Else = {}
+    local Else = nil
 
     while not Self:Match(Token.Types.End) do
         while not Self:Match(Token.Types.Elseif, Token.Types.Else, Token.Types.End) and not Self:IsAtEnd() do
@@ -194,7 +194,7 @@ function Parser.ParseIf(Self: Parser): Statement
         end
     end
 
-    if Self:Match(Token.Types.End) then
+    if Self:Match(Token.Types.End) and not Else then
         Self:Advance()
     elseif not Else then
         Parser.Error(IfToken, `Expected 'end' to close if statement`)
@@ -266,12 +266,22 @@ function Parser.ParseFun(Self: Parser): Statement
         Parser.Error(Self:PeekToken(), `Expected identifier when parsing function, got '{Self:PeekToken().Lexeme}'`)
     end
 
-    local Identifier = Self:Advance()
+    local Identifiers = { Self:Advance() }
+
+    while Self:Match(Token.Types.Dot) do
+        Self:Advance()
+
+        if not Self:Match(Token.Types.Identifier) then
+            Parser.Error(Self:PeekToken(), `Expected identifier when parsing function, got '{Self:PeekToken().Lexeme}'`)
+        end
+
+        table.insert(Identifiers, Self:Advance())
+    end
 
     local Parameters = Self:ParseParameters()
     local Body = Self:ParseBlock(Keyword)
 
-    return Ast.FunctionStatement(Identifier, Parameters, Body)
+    return Ast.FunctionStatement(Identifiers, Parameters, Body)
 end
 
 function Parser.ParseJump(Self: Parser): Statement
@@ -345,7 +355,7 @@ function Parser.ParseAssignmentExpression(Self: Parser): Expression
             if Expression.Value.Type ~= Token.Types.Identifier then
                 Parser.Error(Expression.Value, `Attempt to assign non-identifier literal`)
             end
-        elseif Expression.Type ~= "GetExpression" then
+        elseif Expression.Type ~= "GetExpression" and Expression.Type ~= "IndexExpression" then
             Parser.Error(Operator, `Attempt to assign non-identifier value`)
             return Expression
         end
@@ -454,7 +464,7 @@ function Parser.ParseFactor(Self: Parser): Expression
 end
 
 function Parser.ParseUnary(Self: Parser): Expression
-    if Self:Match(Token.Types.Plus, Token.Types.Minus, Token.Types.Not) then
+    if Self:Match(Token.Types.Plus, Token.Types.Minus, Token.Types.Not, Token.Types.Hash) then
         local Operator = Self:Advance()
         return Ast.UnaryExpression(Operator, Self:ParseUnary())
     end
@@ -490,7 +500,7 @@ function Parser.ParseCall(Self: Parser): Expression
             end
 
             if not Self:Match(Token.Types.RightParenthesis) then
-                Parser.Error(Self:PeekToken(), `Expected ')' to close function call`)
+                Parser.Error(OpenToken, `Expected ')' to close function call`)
             end
 
             Self:Advance()
@@ -506,6 +516,48 @@ function Parser.ParseCall(Self: Parser): Expression
             local Name = Self:Advance()
 
             Expression = Ast.GetExpression(Expression, Operator, Name)
+        elseif Self:Match(Token.Types.Colon) then
+            local Operator = Self:Advance()
+
+            if not Self:Match(Token.Types.Identifier) then
+                Parser.Error(Self:PeekToken(), `Invalid literal index '{Self:PeekToken().Lexeme}'`)
+            end
+
+            local Name = Self:Advance()
+
+            local Arguments = {}
+
+            if not Self:Match(Token.Types.LeftParenthesis) then
+                Parser.Error(Self:PeekToken(), `Function call expected after ':', got '{Self:PeekToken().Lexeme}'`)
+            end
+
+            Self:Advance()
+
+            if not Self:Match(Token.Types.RightParenthesis) then
+                repeat
+                    table.insert(Arguments, Self:ParseExpression())
+                until not (Self:Match(Token.Types.Comma) and Self:Advance())
+            end
+
+            if not Self:Match(Token.Types.RightParenthesis) then
+                Parser.Error(Operator, `Expected ')' to close function call`)
+            end
+
+            Self:Advance()
+
+            Expression = Ast.SelfCallExpression(Expression, Operator, Name, Arguments)
+        elseif Self:Match(Token.Types.LeftSquareBracket) then
+            local Operator = Self:Advance()
+
+            local Index = Self:ParseExpression()
+
+            if not Self:Match(Token.Types.RightSquareBracket) then
+                Parser.Error(Self:PeekToken(), `Expected ']' to close '[', got '{Self:PeekToken().Lexeme}'`)
+            end
+
+            Self:Advance()
+
+            Expression = Ast.IndexExpression(Expression, Operator, Index)
         else
             break
         end
@@ -515,17 +567,20 @@ function Parser.ParseCall(Self: Parser): Expression
 end
 
 function Parser.ParsePrimary(Self: Parser): Expression
+    if Self:Match(Token.Types.LeftBrace) then
+        return Self:ParseTable()
+    end
+
     if Self:Match(Token.Types.LeftParenthesis) then
         Self:Advance()
-        --local Expression = Self:ParseCommaExpression()
+
         local Expression = Self:ParseExpression()
 
-        local Close = Self:PeekToken()
-        if Close.Type == Token.Types.RightParenthesis then
-            Self:Advance()
-        else
-            Parser.Error(Close, "Expected ')' to close expression.")
+        if not Self:Match(Token.Types.RightParenthesis) then
+            Parser.Error(Self:PeekToken(), `Expected ')' to close '(', got '{Self:PeekToken().Lexeme}'`)
         end
+
+        Self:Advance()
 
         return Expression
     end
@@ -550,5 +605,68 @@ function Parser.ParsePrimary(Self: Parser): Expression
     return Ast.LiteralExpression(Self:Advance())
 end
 
+
+function Parser.ParseTable(Self: Parser): Expression
+    Self:Advance()
+
+    local Elements: { { Key: Expression?, Value: Expression } } = {}
+
+    if not Self:Match(Token.Types.RightBrace) then
+        repeat
+            if Self:Match(Token.Types.RightBrace) then
+                break
+            end
+
+            local Left
+
+            local BracketIndex = false
+            if Self:Match(Token.Types.LeftSquareBracket) then
+                Self:Advance()
+                BracketIndex = true
+                Left = Self:ParseExpression()
+            else
+                Left = Ast.LiteralExpression(Self:Advance())
+            end
+
+            if BracketIndex then
+                if not Self:Match(Token.Types.RightSquareBracket) then
+                    Parser.Error(Self:PeekToken(), `Expected ']' to close '[', got '{Self:PeekToken().Lexeme}'`)
+                end
+
+                Self:Advance()
+            end
+            
+            if Self:Match(Token.Types.Equals) then
+                Self:Advance()
+
+                if not BracketIndex and (Left.Type ~= "LiteralExpression" or Left.Value.Type ~= Token.Types.Identifier) then
+                    break
+                end
+
+                table.insert(Elements, {
+                    Key = Left,
+                    Value = Self:ParseExpression()
+                })
+            else
+                if BracketIndex then
+                    Parser.Error(Self:PeekToken(), `Expected '=' when parsing table field, got '{Self:PeekToken().Lexeme}'`)
+                end
+
+                table.insert(Elements, {
+                    Value = Left,
+                })
+            end
+
+        until not (Self:Match(Token.Types.Comma) and Self:Advance())
+    end
+
+    if not Self:Match(Token.Types.RightBrace) then
+        Parser.Error(Self:PeekToken(), `Expected '}' to close '\{', got {Self:PeekToken().Lexeme}`)
+    end
+
+    Self:Advance()
+
+    return Ast.TableExpression(Elements)
+end
 
 return Parser

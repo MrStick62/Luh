@@ -18,8 +18,11 @@ type BinaryExpression = Ast.BinaryExpression
 type UnaryExpression = Ast.UnaryExpression
 type AssignmentExpression = Ast.AssignmentExpression
 type CallExpression = Ast.CallExpression
+type SelfCallExpression = Ast.SelfCallExpression
 type GetExpression = Ast.GetExpression
+type IndexExpression = Ast.IndexExpression
 type FunctionExpression = Ast.FunctionExpression
+type TableExpression = Ast.TableExpression
 type Expression = Ast.Expression
 
 type ExpressionStatement = Ast.ExpressionStatement
@@ -87,6 +90,8 @@ function Interpreter.Run(Self: Interpreter, Statements: { Statement })
             end
         elseif Err.Type == "RuntimeError" then
             Error.Report(Err.Token.Location, Err.Message, Error.Type.Runtime)
+        else
+            error(Err)
         end
     end
 
@@ -206,7 +211,35 @@ function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForState
 end
 
 function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: FunctionStatement)
-    Self.Environment:Define(Statement.Identifier.Lexeme, Self:FunctionToValue(Statement.Parameters, Statement.Body))
+    local Source = Statement.Identifiers[1]
+
+    if #Statement.Identifiers == 1 then
+        Self.Environment:Define(Source.Lexeme, Self:FunctionToValue(Statement.Parameters, Statement.Body))
+        return
+    end
+
+    local Table = Self.Environment:Find(Source.Lexeme)
+
+    if not Table then
+        Interpreter.Error(Source, `Attempt to access undefined variable '{Source.Lexeme}'`)
+        return
+    end
+
+    local Current = Table:Get()
+    for i = 2, #Statement.Identifiers - 1 do
+        if typeof(Current) ~= "table" then
+            Interpreter.Error(Statement.Identifiers[i], `Attempt to index {typeof(Current)} with '{Statement.Identifiers[i].Lexeme}'`)
+        end
+
+        Current = Current[Statement.Identifiers[i].Lexeme]
+    end
+
+    local Identifier = Statement.Identifiers[#Statement.Identifiers]
+    if typeof(Current) ~= "table" then
+        Interpreter.Error(Identifier, `Attempt to index {typeof(Current)} with '{Identifier.Lexeme}'`)
+    end
+
+    Current[Identifier.Lexeme] = Self:FunctionToValue(Statement.Parameters, Statement.Body)
 end
 
 function Interpreter.EvaluateJumpStatement(Self: Interpreter, Statement: JumpStatement)
@@ -249,10 +282,10 @@ function Interpreter.CatchJump(Self: Interpreter, Statements: { Statement }, Env
     return nil
 end
 
-function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (any) -> (any)
+function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (Token, { any }) -> (any)
     local Outside = Environment.New(Self.Environment)
 
-    return function(Arguments: { any }): (any)
+    return function(Caller: Token, Arguments: { any }): (any)
         local Scope = Environment.New(Outside)
 
         for i, Parameter in Parameters do
@@ -327,7 +360,31 @@ function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallE
         table.insert(Arguments, Self:EvaluateExpression(Argument):Get())
     end
 
-    return Reference.New(Function(Arguments))
+    return Reference.New(Function(Expression.Token, Arguments))
+end
+
+function Interpreter.EvaluateSelfCallExpression(Self: Interpreter, Expression: SelfCallExpression): Reference
+    local Table = Self:EvaluateExpression(Expression.Left):Get()
+
+    if typeof(Table) ~= "table" then
+        Interpreter.Error(Expression.Operator, `Attempt to index {typeof(Table)} with '{Expression.Name.Lexeme}'`)
+    end
+
+    local Function = Table[Expression.Name.Lexeme]
+
+    if typeof(Function) ~= "function" then
+        Interpreter.Error(Expression.Operator, `Attempt to call a {typeof(Function)} value`)
+    end
+
+    local Arguments = {}
+
+    table.insert(Arguments, Self:EvaluateExpression(Expression.Left):Get())
+
+    for _, Argument in Expression.Arguments do
+        table.insert(Arguments, Self:EvaluateExpression(Argument):Get())
+    end
+
+    return Reference.New(Function(Expression.Operator, Arguments))
 end
 
 function Interpreter.EvaluateGetExpression(Self: Interpreter, Expression: GetExpression): Reference
@@ -340,14 +397,66 @@ function Interpreter.EvaluateGetExpression(Self: Interpreter, Expression: GetExp
     return Reference.FromTable(Table, Expression.Name.Lexeme)
 end
 
+function Interpreter.EvaluateIndexExpression(Self: Interpreter, Expression: IndexExpression): Reference
+    local Table = Self:EvaluateExpression(Expression.Left):Get()
+    local Index = Self:EvaluateExpression(Expression.Index):Get()
+
+    if typeof(Table) ~= "table" then
+        Interpreter.Error(Expression.Operator, `Attempt to index {typeof(Table)} with {typeof(Index)}`)
+    end
+
+    return Reference.FromTable(Table, Index)
+end
+
 function Interpreter.EvaluateFunctionExpression(Self: Interpreter, Expression: FunctionExpression): Reference
     return Reference.New(Self:FunctionToValue(Expression.Parameters, Expression.Body))
+end
+
+function Interpreter.EvaluateTableExpression(Self: Interpreter, Expression: TableExpression): Reference
+    local Table = {}
+
+    local ArrayIndex = 1
+
+    for _, Pair in Expression.Elements do
+        local Key: any = ArrayIndex
+
+        if Pair.Key then
+            if Pair.Key.Type == "LiteralExpression" then
+                Key = Pair.Key.Value.Lexeme
+            else
+                Key = Self:EvaluateExpression(Pair.Key):Get()
+            end
+        else
+            ArrayIndex += 1
+        end
+
+        Table[Key] = Self:EvaluateExpression(Pair.Value):Get()
+    end
+
+    return Reference.New(Table)
+end
+
+function Interpreter.HasMetaMethod(Table: any, Method: string): boolean
+    local Meta = getmetatable(Table)
+    if typeof(Meta) == "table" and typeof(Meta[Method]) == "function" then
+        return true
+    end
+
+    return false
 end
 
 Interpreter.BinaryFunctions = {
     [Token.Types.Plus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         -- Why am I manually passing self only here? Try fixing it. See what kind of wrath the Luau Language Server inflicts upon you. God help us all.
         local Right = Interpreter.EvaluateExpression(Self, RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__add") then
+            return Left.__add(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__add") then
+            return Right.__add(Operator, { Left, Right })
+        end
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
@@ -359,6 +468,14 @@ Interpreter.BinaryFunctions = {
     [Token.Types.Minus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
+        if Interpreter.HasMetaMethod(Left, "__sub") then
+            return Left.__sub(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__sub") then
+            return Right.__sub(Operator, { Left, Right })
+        end
+
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)            
@@ -368,6 +485,14 @@ Interpreter.BinaryFunctions = {
     end,
     [Token.Types.Star] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__mul") then
+            return Left.__mul(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__mul") then
+            return Right.__mul(Operator, { Left, Right })
+        end
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
@@ -379,6 +504,14 @@ Interpreter.BinaryFunctions = {
     [Token.Types.Slash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
+        if Interpreter.HasMetaMethod(Left, "__div") then
+            return Left.__div(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__div") then
+            return Right.__div(Operator, { Left, Right })
+        end
+
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)            
@@ -388,6 +521,14 @@ Interpreter.BinaryFunctions = {
     end,
     [Token.Types.DoubleSlash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__idiv") then
+            return Left.__idiv(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__idiv") then
+            return Right.__idiv(Operator, { Left, Right })
+        end
         
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
@@ -399,6 +540,14 @@ Interpreter.BinaryFunctions = {
     [Token.Types.Modulo] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
+        if Interpreter.HasMetaMethod(Left, "__mod") then
+            return Left.__mod(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__mod") then
+            return Right.__mod(Operator, { Left, Right })
+        end
+
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)            
@@ -409,8 +558,16 @@ Interpreter.BinaryFunctions = {
     [Token.Types.Karat] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
+        if Interpreter.HasMetaMethod(Left, "__pow") then
+            return Left.__pow(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__pow") then
+            return Right.__pow(Operator, { Left, Right })
+        end
+
         local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
+        if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
         end
 
@@ -418,6 +575,14 @@ Interpreter.BinaryFunctions = {
     end,
     [Token.Types.DoubleDot] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__concat") then
+            return Left.__concat(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__concat") then
+            return Right.__concat(Operator, { Left, Right })
+        end
 
         return tostring(Left) .. tostring(Right)
     end,
@@ -433,13 +598,41 @@ Interpreter.BinaryFunctions = {
         return not Left and Right or not Right and Left or (Left ~= Right or Left ~= true and Left ~= false) and nil
     end,
     [Token.Types.Equal] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left == Self:EvaluateExpression(RightExpr):Get()
+        local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__eq") then
+            return Left.__eq(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__eq") then
+            return Right.__eq(Operator, { Left, Right })
+        end
+
+        return Left == Right
     end,
     [Token.Types.NotEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left ~= Self:EvaluateExpression(RightExpr):Get()
+        local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__eq") then
+            return not Left.__eq(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__eq") then
+            return not Right.__eq(Operator, { Left, Right })
+        end
+
+        return Left ~= Right
     end,
     [Token.Types.Greater] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__le") then
+            return not Left.__le(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__le") then
+            return not Right.__le(Operator, { Left, Right })
+        end
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
@@ -452,6 +645,14 @@ Interpreter.BinaryFunctions = {
     [Token.Types.GreaterEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
+        if Interpreter.HasMetaMethod(Left, "__lt") then
+            return not Left.__lt(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__lt") then
+            return not Right.__lt(Operator, { Left, Right })
+        end
+
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
@@ -462,6 +663,14 @@ Interpreter.BinaryFunctions = {
     [Token.Types.Less] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
+        if Interpreter.HasMetaMethod(Left, "__lt") then
+            return Left.__lt(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__lt") then
+            return Right.__lt(Operator, { Left, Right })
+        end
+
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
             Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)    
@@ -471,6 +680,14 @@ Interpreter.BinaryFunctions = {
     end,
     [Token.Types.LessEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
+
+        if Interpreter.HasMetaMethod(Left, "__le") then
+            return Left.__le(Operator, { Left, Right })
+        end
+
+        if Interpreter.HasMetaMethod(Right, "__le") then
+            return Right.__le(Operator, { Left, Right })
+        end
         
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType ~= "number" or RightType ~= "number" then
@@ -492,17 +709,35 @@ Interpreter.UnaryFunctions = {
         return nil
     end,
     [Token.Types.Minus] = function(Self: Interpreter, Operator: Token, Value: any): any
-        local Type = typeof(Value)
-        if Type == "number" then
-            return -Value
+        if Interpreter.HasMetaMethod(Value, "__unm") then
+            return Value.__unm(Operator, { Value })
         end
 
-        Interpreter.Error(Operator, `Attempt to use unary '-' on {typeof(Value)}`)
-        return nil
+        if Interpreter.HasMetaMethod(Value, "__mul") then
+            return Value.__mul(Operator, { -1, Value })
+        end
+
+        if typeof(Value) ~= "number" then
+            Interpreter.Error(Operator, `Attempt to use unary '-' on {typeof(Value)}`)
+        end
+        
+        return -Value
     end,
     [Token.Types.Not] = function(Self: Interpreter, Operator: Token, Value: any): any
         return not Value
     end,
+    [Token.Types.Hash] = function(Self: Interpreter, Operator: Token, Value: any): any
+        local Type = typeof(Value)
+        if Type ~= "table" then
+            Interpreter.Error(Operator, `Attempt to get the size of {typeof(Value)}`)
+        end
+
+        if Interpreter.HasMetaMethod(Value, "__len") then
+            return Value.__len(Operator, { Value })
+        end
+
+        return #Value
+    end
 } :: { [number]: (Self: Interpreter, Operator: Token, Value: any) -> any }
 
 Interpreter.AssignmentFunctions = {
@@ -653,8 +888,11 @@ Interpreter.ExpressionMap = {
     BinaryExpression = Interpreter.EvaluateBinaryExpression,
     AssignmentExpression = Interpreter.EvaluateAssignmentExpression,
     CallExpression = Interpreter.EvaluateCallExpression,
+    SelfCallExpression = Interpreter.EvaluateSelfCallExpression,
     GetExpression = Interpreter.EvaluateGetExpression,
+    IndexExpression = Interpreter.EvaluateIndexExpression,
     FunctionExpression = Interpreter.EvaluateFunctionExpression,
+    TableExpression = Interpreter.EvaluateTableExpression,
 } :: { [string]: (Self: Interpreter, Expression: Expression) -> any }
 
 return Interpreter

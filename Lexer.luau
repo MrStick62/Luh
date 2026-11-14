@@ -116,7 +116,8 @@ function Lexer.IsAlpha(Self: Lexer, Char: string): boolean
     local Num = Char:byte()
     local IsLower = string.byte('a') <= Num and Num <= string.byte('z')
     local IsUpper = string.byte('A') <= Num and Num <= string.byte('Z')
-    return IsUpper or IsLower
+    local IsUnderscore = Char == '_'
+    return IsUpper or IsLower or IsUnderscore
 end
 
 function Lexer.ReadNumber(Self: Lexer)
@@ -136,7 +137,7 @@ function Lexer.ReadNumber(Self: Lexer)
 end
 
 function Lexer.ReadIdentifier(Self: Lexer)
-    while Self:IsAlpha(Self:PeekChar()) do
+    while Self:IsAlpha(Self:PeekChar()) or Self:IsDigit(Self:PeekChar()) do
         Self:Consume()
     end
 
@@ -150,6 +151,10 @@ Lexer.ReadChar = {
             Self:Consume()
         end
     end,
+    ['#'] = function(Self: Lexer) 
+        Self:Consume()
+        Self:AddToken(Token.Types.Hash)
+    end,
     ['('] = function(Self: Lexer) 
         Self:Consume()
         Self:AddToken(Token.Types.LeftParenthesis)
@@ -157,6 +162,14 @@ Lexer.ReadChar = {
     [')'] = function(Self: Lexer) 
         Self:Consume()
         Self:AddToken(Token.Types.RightParenthesis)
+    end,
+    ['['] = function(Self: Lexer) 
+        Self:Consume()
+        Self:AddToken(Token.Types.LeftSquareBracket)
+    end,
+    [']'] = function(Self: Lexer) 
+        Self:Consume()
+        Self:AddToken(Token.Types.RightSquareBracket)
     end,
     ['{'] = function(Self: Lexer) 
         Self:Consume()
