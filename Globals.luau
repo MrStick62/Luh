@@ -12,6 +12,11 @@ function Globals.Load(Interpreter: Interpreter)
     Interpreter:LoadGlobal(
         "print", 
         function(Caller: Token, Arguments: { any }) 
+            if #Arguments == 0 then
+                print()
+                return
+            end
+
             if #Arguments ~= 1 then
                 Interpreter.Error(Caller, `Function 'print' expects 1 argument, but got {#Arguments}`)
             end

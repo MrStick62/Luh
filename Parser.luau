@@ -338,6 +338,16 @@ Parser.StatementMap = {
     [Token.Types.Continue] = Parser.ParseJump,
 }
 
+function Parser.ParseTuple(Self: Parser): { Expression }
+    local Expressions = {}
+
+    repeat
+        table.insert(Expressions, Self:ParseExpression())
+    until not (Self:Match(Token.Types.Comma) and Self:Advance())
+
+    return Expressions
+end
+
 function Parser.ParseExpression(Self: Parser): Expression
     return Self:ParseAssignmentExpression()
 end
