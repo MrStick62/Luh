@@ -25,9 +25,9 @@ export type UnaryExpression = {
 
 export type AssignmentExpression = {
     Type: "AssignmentExpression",
-    Left: Expression,
+    Left: { Expression },
     Operator: Token,
-    Right: Expression,
+    Right: { Expression },
 }
 
 export type CallExpression = {
@@ -79,8 +79,8 @@ export type ExpressionStatement = {
 
 export type VariableStatement = {
     Type: "VariableStatement",
-    Identifier: Token,
-    Initializer: Expression?,
+    Identifiers: { Token },
+    Initializers: { Expression },
 }
 
 export type DoStatement = {
@@ -126,7 +126,7 @@ export type FunctionStatement = {
 export type JumpStatement = {
     Type: "JumpStatement",
     Keyword: Token,
-    Value: Expression?,
+    Tuple: { Expression },
 }
 
 export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement | FunctionStatement | JumpStatement
@@ -163,7 +163,7 @@ function Ast.UnaryExpression(Operator: Token, Expression: Expression): UnaryExpr
     return Self
 end
 
-function Ast.AssignmentExpression(Left: Expression, Operator: Token, Right: Expression): AssignmentExpression
+function Ast.AssignmentExpression(Left: { Expression }, Operator: Token, Right: { Expression }): AssignmentExpression
     local Self = {} :: AssignmentExpression
 
     Self.Type = "AssignmentExpression"
@@ -247,12 +247,12 @@ function Ast.ExpressionStatement(Expression: Expression): ExpressionStatement
     return Self
 end
 
-function Ast.VariableStatement(Identifier: Token, Initializer: Expression?): VariableStatement
+function Ast.VariableStatement(Identifiers: { Token }, Initializers: { Expression }): VariableStatement
     local Self = {} :: VariableStatement
 
     Self.Type = "VariableStatement"
-    Self.Identifier = Identifier
-    Self.Initializer = Initializer
+    Self.Identifiers = Identifiers
+    Self.Initializers = Initializers
 
     return Self
 end
@@ -321,12 +321,12 @@ function Ast.FunctionStatement(Identifiers: { Token }, Parameters: { Token }, Bo
     return Self
 end
 
-function Ast.JumpStatement(Keyword: Token, Value: Expression?): JumpStatement
+function Ast.JumpStatement(Keyword: Token, Value: { Expression }): JumpStatement
     local Self = {} :: JumpStatement
 
     Self.Type = "JumpStatement"
     Self.Keyword = Keyword
-    Self.Value = Value
+    Self.Tuple = Value
 
     return Self
 end

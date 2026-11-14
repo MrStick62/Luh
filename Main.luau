@@ -4,6 +4,13 @@ local Luh = require("./Luh")
 
 local Script = [[
 
+fun Hello()
+    return 2, nil, 3, nil, nil, 5
+end
+
+var x, y, z, w, a, b, c = nil, Hello()
+print(x .. y .. z .. w .. a .. b .. c)
+
 var Vector3 = {}
 Vector3.__index = Vector3
 
@@ -41,9 +48,12 @@ fun Vector3.__tostring(Self)
     return "X: " .. Self.X .. ", Y: " .. Self.Y .. ", Z: " .. Self.Z    
 end
 
-var V1 = Vector3.New(2, 2, 2)
-var V2 = Vector3.New(1, 2, 3)
-print(2 * (V2 + V1) * #V1)
+fun Vector3.ToString(Self, x)
+    return "X: " .. Self.X * x .. ", Y: " .. Self.Y * x .. ", Z: " .. Self.Z * x
+end
+
+var V1, V2 = Vector3.New(2, 2, 2), Vector3.New(1, 2, 3)
+print(V1:ToString(2))
 
 ]]
 

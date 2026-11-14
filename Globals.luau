@@ -6,15 +6,45 @@ type Token = Token.Token
 local Interpreter = require("./Interpreter")
 type Interpreter = Interpreter.Interpreter
 
+local Reference = require("./Reference")
+
 local Globals = {}
 
+function Globals.ToLuhFunction(Func: (...any) -> ...any)
+    return function(Caller: Token, Arguments: { any })
+        local Result = nil
+
+        local Ok, Err = xpcall(
+            function(...)
+                Result = table.pack(Func(table.unpack(Arguments)))
+            end,
+            function(Err)
+                return Err
+            end)
+
+        if not Ok then
+            Interpreter.Error(Caller, Err)
+        end
+
+        return Result or { n = 0 }
+    end
+end
+
 function Globals.Load(Interpreter: Interpreter)
+
+    Interpreter:LoadGlobal("print", Globals.ToLuhFunction(print))
+    Interpreter:LoadGlobal("meta", Globals.ToLuhFunction(setmetatable))
+
+    Interpreter:LoadGlobal("insert", Globals.ToLuhFunction(table.insert))
+    Interpreter:LoadGlobal("unpack", Globals.ToLuhFunction(table.unpack))
+    
+    --[[
     Interpreter:LoadGlobal(
         "print", 
         function(Caller: Token, Arguments: { any }) 
             if #Arguments == 0 then
                 print()
-                return
+                return { Size = 0 }
             end
 
             if #Arguments ~= 1 then
@@ -22,11 +52,12 @@ function Globals.Load(Interpreter: Interpreter)
             end
 
             if Interpreter.HasMetaMethod(Arguments[1], "__tostring") then
-                print(Arguments[1].__tostring(Caller, { Arguments[1] }))
-                return
+                print(Arguments[1].__tostring(Caller, { Arguments[1] })[1])
+                return { Size = 0 }
             end
 
             print(tostring(Arguments[1]))
+            return { Size = 0 }
         end
     )
 
@@ -41,7 +72,7 @@ function Globals.Load(Interpreter: Interpreter)
                 return Arguments[1].__tostring(Caller, { Arguments[1] })
             end
 
-            return tostring(Arguments[1])
+            return { tostring(Arguments[1]), Size = 1 }
         end
     )
 
@@ -52,7 +83,7 @@ function Globals.Load(Interpreter: Interpreter)
                 Interpreter.Error(Caller, `Function 'typeof' expects 1 argument, but got {#Arguments}`)
             end
 
-            return typeof(Arguments[1])
+            return { typeof(Arguments[1]), Size = 1 }
         end
     )
 
@@ -68,7 +99,7 @@ function Globals.Load(Interpreter: Interpreter)
                     Interpreter.Error(Caller, `Attempt to call 'sqrt' on {typeof(Arguments[1])}`)
                 end
 
-                return math.sqrt(Arguments[1])
+                return { math.sqrt(Arguments[1]), Size = 1 }
             end
         }
     )
@@ -88,18 +119,15 @@ function Globals.Load(Interpreter: Interpreter)
                 Interpreter.Error(Caller, `Attempt to call 'meta' on {typeof(Table)} and {typeof(Behavior)}`)
             end
 
-            return setmetatable(Table, Behavior)
+            return { setmetatable(Table, Behavior), Size = 1 }
         end
     )
 
     Interpreter:LoadGlobal(
         "table",
-        {
-            insert = function(Caller: Token, Arguments: { any })
-
-            end
-        }
+        {}
     )
+    ]]
 end
 
 return Globals

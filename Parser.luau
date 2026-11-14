@@ -107,9 +107,15 @@ function Parser.ParseStatement(Self: Parser): Statement
     end
 
     local StartToken = Self:PeekToken()
-    local Expression = Self:ParseExpression()
+    local Expression = Self:ParseCall()
 
-    if Expression.Type ~= "AssignmentExpression" and Expression.Type ~= "CallExpression" then
+    if Expression.Type == "CallExpression" then
+        return Ast.ExpressionStatement(Expression)
+    end
+
+    Expression = Self:ParseAssignmentExpression(Expression)
+
+    if Expression.Type ~= "AssignmentExpression" then
         Parser.Error(StartToken, `Statement expected, got '{StartToken.Lexeme}'`)
     end
 
@@ -119,19 +125,27 @@ end
 function Parser.ParseVar(Self: Parser): Statement
     Self:Advance()
 
-    local Identifier = Self:Advance()
-    if Identifier.Type ~= Token.Types.Identifier then
-        Parser.Error(Identifier, `Expected identifier, got '{Identifier.Lexeme}'`)
-    end
+    local Identifiers = {}
 
-    local Initializer = nil
+    repeat
+        local Identifier = Self:Advance()
+
+        if Identifier.Type ~= Token.Types.Identifier then
+            Parser.Error(Identifier, `Expected identifier, got '{Identifier.Lexeme}'`)
+        end
+
+        table.insert(Identifiers, Identifier)
+    until not (Self:Match(Token.Types.Comma) and Self:Advance())
+
+
+    local Initializers = {}
     if Self:Match(Token.Types.Equals) then
         Self:Advance()
 
-        Initializer = Self:ParseExpression()
+        Initializers = Self:ParseTuple()
     end
 
-    return Ast.VariableStatement(Identifier, Initializer)
+    return Ast.VariableStatement(Identifiers, Initializers)
 end
 
 function Parser.ParseBlock(Self: Parser, StartToken: Token): { Statement }
@@ -288,14 +302,14 @@ function Parser.ParseJump(Self: Parser): Statement
     local Keyword = Self:Advance()
 
     if Self:Match(Token.Types.End) then
-        return Ast.JumpStatement(Keyword)
+        return Ast.JumpStatement(Keyword, {})
     end
 
     if Keyword.Type ~= Token.Types.Return then
         Parser.Error(Keyword, `Expected 'end' after {Keyword.Lexeme} statement`)
     end
 
-    return Ast.JumpStatement(Keyword, Self:ParseExpression())
+    return Ast.JumpStatement(Keyword, Self:ParseTuple())
 end
 
 function Parser.ParseParameters(Self: Parser): { Token }
@@ -342,7 +356,7 @@ function Parser.ParseTuple(Self: Parser): { Expression }
     local Expressions = {}
 
     repeat
-        table.insert(Expressions, Self:ParseExpression())
+        table.insert(Expressions, Self:ParseXor())
     until not (Self:Match(Token.Types.Comma) and Self:Advance())
 
     return Expressions
@@ -352,26 +366,34 @@ function Parser.ParseExpression(Self: Parser): Expression
     return Self:ParseAssignmentExpression()
 end
 
-function Parser.ParseAssignmentExpression(Self: Parser): Expression
-    local Expression = Self:ParseXor()
+function Parser.ParseAssignmentExpression(Self: Parser, Left: Expression?): Expression
+    local Expression = Left or Self:ParseXor()
+    local Expressions = { Expression }
 
+    if Left then
+        while Self:Match(Token.Types.Comma) do
+            Self:Advance()
+            table.insert(Expressions, Self:ParseXor())
+        end
+    end
     
     if Self:Match(Token.Types.Equals, Token.Types.PlusEquals, Token.Types.MinusEquals, Token.Types.StarEquals, 
             Token.Types.SlashEquals, Token.Types.DoubleSlashEquals, Token.Types.ModuloEquals, Token.Types.KaratEquals) then
 
         local Operator = Self:Advance()
 
-        if Expression.Type == "LiteralExpression" then
-            if Expression.Value.Type ~= Token.Types.Identifier then
-                Parser.Error(Expression.Value, `Attempt to assign non-identifier literal`)
+        for _, Identifier in Expressions do
+            if Identifier.Type == "LiteralExpression" then
+                if Identifier.Value.Type ~= Token.Types.Identifier then
+                    Parser.Error(Identifier.Value, `Attempt to assign non-identifier literal`)
+                end
+            elseif Identifier.Type ~= "GetExpression" and Identifier.Type ~= "IndexExpression" then
+                Parser.Error(Operator, `Attempt to assign non-identifier value`)
             end
-        elseif Expression.Type ~= "GetExpression" and Expression.Type ~= "IndexExpression" then
-            Parser.Error(Operator, `Attempt to assign non-identifier value`)
-            return Expression
         end
 
-        local Right = Self:ParseAssignmentExpression()
-        return Ast.AssignmentExpression(Expression, Operator, Right)
+        local Right = Left and Self:ParseTuple() or { Self:ParseAssignmentExpression() }
+        return Ast.AssignmentExpression(Expressions, Operator, Right)
     end
 
     return Expression
