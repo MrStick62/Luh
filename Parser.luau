@@ -214,7 +214,7 @@ function Parser.ParseIf(Self: Parser): Statement
         Parser.Error(IfToken, `Expected 'end' to close if statement`)
     end
 
-    return Ast.IfStatement(Ast.Conditional(Condition, Body), ElseIf, Else)
+    return Ast.IfStatement(Ast.Conditional(Condition, Body), ElseIf, Else or {})
 end
 
 function Parser.ParseWhile(Self: Parser): Statement
@@ -241,6 +241,40 @@ function Parser.ParseFor(Self: Parser): Statement
 
     local Identifier = Self:Advance()
 
+    if Self:Match(Token.Types.Comma) or Self:Match(Token.Types.In) then
+        local Identifiers = { Identifier }
+
+        if Self:Match(Token.Types.Comma) then
+            Self:Advance()
+            
+            repeat
+                if not Self:Match(Token.Types.Identifier) then
+                    Parser.Error(Identifier, `Expected identifier, got '{Identifier.Lexeme}'`)
+                end
+
+                table.insert(Identifiers, Self:Advance())
+            until not (Self:Match(Token.Types.Comma) and Self:Advance())
+        end
+
+        if not Self:Match(Token.Types.In) then
+            Parser.Error(Self:PeekToken(), `Expected 'in', but got {Self:PeekToken().Lexeme}`)
+        end
+
+        Self:Advance()
+
+        local Target = Self:ParseTuple()
+
+        if not Self:Match(Token.Types.Do) then
+            Parser.Error(Self:PeekToken(), `Expected 'do' when parsing for loop, got '{Self:PeekToken().Lexeme}'`)
+        end
+
+        Self:Advance()
+
+        local Body = Self:ParseBlock(Keyword)
+
+        return Ast.ForEachStatement(Keyword, Identifiers, Target, Body)
+    end
+
     if not Self:Match(Token.Types.Equals) then
         Parser.Error(Self:PeekToken(), `Expected '=' when parsing assignment, got '{Self:PeekToken().Lexeme}'`)
     end
@@ -263,10 +297,11 @@ function Parser.ParseFor(Self: Parser): Statement
         Increment = Self:ParseExpression()
     end
 
-    local DoToken = Self:Advance()
-    if DoToken.Type ~= Token.Types.Do then
-        Parser.Error(DoToken, `Expected 'do' when parsing for loop, got '{DoToken.Lexeme}'`)
+    if not Self:Match(Token.Types.Do) then
+        Parser.Error(Self:PeekToken(), `Expected 'do' when parsing for loop, got '{Self:PeekToken().Lexeme}'`)
     end
+
+    Self:Advance()
 
     local Body = Self:ParseBlock(Keyword)
 
@@ -649,7 +684,7 @@ function Parser.ParseTable(Self: Parser): Expression
                 break
             end
 
-            local Left
+            local Left = nil
 
             local BracketIndex = false
             if Self:Match(Token.Types.LeftSquareBracket) then
@@ -657,7 +692,7 @@ function Parser.ParseTable(Self: Parser): Expression
                 BracketIndex = true
                 Left = Self:ParseExpression()
             else
-                Left = Ast.LiteralExpression(Self:Advance())
+                Left = Self:ParseXor()
             end
 
             if BracketIndex then

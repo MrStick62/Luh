@@ -6,37 +6,20 @@ type Token = Token.Token
 local Interpreter = require("./Interpreter")
 type Interpreter = Interpreter.Interpreter
 
-local Reference = require("./Reference")
-
 local Globals = {}
 
-function Globals.ToLuhFunction(Func: (...any) -> ...any)
-    return function(Caller: Token, Arguments: { any })
-        local Result = nil
-
-        local Ok, Err = xpcall(
-            function(...)
-                Result = table.pack(Func(table.unpack(Arguments)))
-            end,
-            function(Err)
-                return Err
-            end)
-
-        if not Ok then
-            Interpreter.Error(Caller, Err)
-        end
-
-        return Result or { n = 0 }
-    end
-end
-
 function Globals.Load(Interpreter: Interpreter)
+    Interpreter:LoadGlobal("print", print)
+    Interpreter:LoadGlobal("meta", setmetatable)
+--[[
+    Interpreter:LoadGlobal("print", Interpreter.ToLuhFunction(print))
+    Interpreter:LoadGlobal("tostring", Interpreter.ToLuhFunction(tostring))
 
-    Interpreter:LoadGlobal("print", Globals.ToLuhFunction(print))
-    Interpreter:LoadGlobal("meta", Globals.ToLuhFunction(setmetatable))
+    Interpreter:LoadGlobal("meta", Interpreter.ToLuhFunction(setmetatable))
 
-    Interpreter:LoadGlobal("insert", Globals.ToLuhFunction(table.insert))
-    Interpreter:LoadGlobal("unpack", Globals.ToLuhFunction(table.unpack))
+    Interpreter:LoadGlobal("insert", Interpreter.ToLuhFunction(table.insert))
+    Interpreter:LoadGlobal("unpack", Interpreter.ToLuhFunction(table.unpack))
+    ]]
     
     --[[
     Interpreter:LoadGlobal(

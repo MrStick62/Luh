@@ -12,7 +12,7 @@ type ReferenceData = {
 
 export type Reference = typeof(setmetatable({} :: ReferenceData, Reference))
 
-export type Tuple = typeof(table.pack())
+export type Tuple = { [number]: any, n: number }
 
 function Reference.New(Value: any, Mutable: boolean?): Reference
     local Self = {}
@@ -25,19 +25,23 @@ function Reference.New(Value: any, Mutable: boolean?): Reference
     return setmetatable(Self, Reference)
 end
 
-function Reference.Tuple(Tuple: Tuple): Reference
+function Reference.Tuple(...: any): Reference
     local Self = {}
-
     
     Self.Wrapper = {}
     Self.Indices = {}
     Self.Mutable = false
-    Self.Size = Tuple.n
 
-    for i = 1, Tuple.n do
-        Self.Wrapper[i] = Tuple[i]
+    local Size = 0
+
+    for i, Value in {...} do
+        Self.Wrapper[i] = Value
         Self.Indices[i] = i
+
+        Size = i
     end
+
+    Self.Size = Size
 
     return setmetatable(Self, Reference)
 end

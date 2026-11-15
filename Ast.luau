@@ -116,6 +116,14 @@ export type ForStatement = {
     Body: { Statement },
 }
 
+export type ForEachStatement = {
+    Type: "ForEachStatement",
+    Keyword: Token,
+    Identifiers: { Token },
+    Arguments: { Expression },
+    Body: { Statement },
+}
+
 export type FunctionStatement = {
     Type: "FunctionStatement",
     Identifiers: { Token },
@@ -129,7 +137,7 @@ export type JumpStatement = {
     Tuple: { Expression },
 }
 
-export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement | FunctionStatement | JumpStatement
+export type Statement = ExpressionStatement | VariableStatement | DoStatement | IfStatement | WhileStatement | ForStatement | ForEachStatement | FunctionStatement | JumpStatement
 
 export type Ast = Expression
 
@@ -296,15 +304,27 @@ function Ast.WhileStatement(Condition: Expression, Body: { Statement }): WhileSt
     return Self
 end
 
-function Ast.ForStatement(Token: Token, Identifier: Token, Initial: Expression, Limit: Expression, Increment: Expression?, Body: { Statement }): ForStatement
+function Ast.ForStatement(Keyword: Token, Identifier: Token, Initial: Expression, Limit: Expression, Increment: Expression?, Body: { Statement }): ForStatement
     local Self = {} :: ForStatement
 
     Self.Type = "ForStatement"
-    Self.Keyword = Token
+    Self.Keyword = Keyword
     Self.Identifier = Identifier
     Self.Initial = Initial
     Self.Limit = Limit
     Self.Increment = Increment
+    Self.Body = Body
+
+    return Self
+end
+
+function Ast.ForEachStatement(Keyword: Token, Identifiers: { Token }, Arguments: { Expression }, Body: { Statement }): ForEachStatement
+    local Self = {} :: ForEachStatement
+
+    Self.Type = "ForEachStatement"
+    Self.Keyword = Keyword
+    Self.Identifiers = Identifiers
+    Self.Arguments = Arguments
     Self.Body = Body
 
     return Self
