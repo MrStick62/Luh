@@ -263,27 +263,6 @@ function Interpreter.EvaluateForEachStatement(Self: Interpreter, Statement: ForE
     end
 end
 
---[[
-function Interpreter.EvaluateForEachOverride(Self: Interpreter, Target: (...any) -> ...any, Statement: ForEachStatement)
-    
-
-    while true do
-        local Values = Target(Statement.Keyword, {})
-
-        local Jump = Self:CatchJump(Statement.Body, Scope)
-        if Jump then
-            if Jump.Keyword.Type == Token.Types.Break then
-                break
-            elseif Jump.Keyword.Type == Token.Types.Continue then
-                continue
-            elseif Jump.Keyword.Type == Token.Types.Return then
-                Interpreter.Jump(Jump.Keyword, Jump.Tuple)
-            end
-        end
-    end
-end
-]]
-
 function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: FunctionStatement)
     local Source = Statement.Identifiers[1]
 
@@ -391,28 +370,6 @@ function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, B
     end
 end
 
---[[
-function Interpreter.ToLuhFunction(Func: (...any) -> ...any)
-    return function(Caller: Token, Arguments: { any })
-        local Result = nil
-
-        local Ok, Err = xpcall(
-            function(...)
-                Result = table.pack(Func(table.unpack(Arguments)))
-            end,
-            function(Err)
-                return Err
-            end)
-
-        if not Ok then
-            Interpreter.Error(Caller, Err)
-        end
-
-        return Result or { n = 0 }
-    end
-end
-]]
-
 Interpreter.StatementMap = {
     ExpressionStatement = Interpreter.EvaluateExpressionStatement,
     VariableStatement = Interpreter.EvaluateVariableStatement,
@@ -498,7 +455,21 @@ function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallE
 
     local Arguments = Self:EvaluateTupleExpression(Expression.Arguments)
 
-    return Reference.Tuple(Function(table.unpack(Arguments, 1, Arguments.n)))
+    local Result = Reference.New(nil)
+
+    local OK, Err = xpcall(
+        function(...)
+            Result = Reference.Tuple(Function(table.unpack(Arguments, 1, Arguments.n)))
+        end, 
+        function(Err)
+            return Err
+        end)
+
+    if not OK then
+        Interpreter.Error(Expression.Token, Err)
+    end
+
+    return Result
 end
 
 function Interpreter.EvaluateSelfCallExpression(Self: Interpreter, Expression: SelfCallExpression): Reference
@@ -750,7 +721,7 @@ Interpreter.BinaryFunctions = {
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
-            return Reference.New(Left < Right)
+            return Left < Right
         end
 
         if Interpreter.HasMetaMethod(Left, "__lt") or Interpreter.HasMetaMethod(Right, "__lt") then
@@ -765,7 +736,7 @@ Interpreter.BinaryFunctions = {
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
-            return Reference.New(Left <= Right)
+            return Left <= Right
         end
 
         if Interpreter.HasMetaMethod(Left, "__le") or Interpreter.HasMetaMethod(Right, "__le") then
