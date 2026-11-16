@@ -733,6 +733,10 @@ Interpreter.BinaryFunctions = {
             return Left > Right
         end
 
+        if LeftType == "string" and RightType == "string" then
+            return Left > Right
+        end
+
         if Interpreter.HasMetaMethod(Left, "__le") or Interpreter.HasMetaMethod(Right, "__le") then
             return Left > Right
         end
@@ -745,6 +749,10 @@ Interpreter.BinaryFunctions = {
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
+            return Left >= Right
+        end
+
+        if LeftType == "string" and RightType == "string" then
             return Left >= Right
         end
 
@@ -763,6 +771,10 @@ Interpreter.BinaryFunctions = {
             return Left < Right
         end
 
+        if LeftType == "string" and RightType == "string" then
+            return Left < Right
+        end
+
         if Interpreter.HasMetaMethod(Left, "__lt") or Interpreter.HasMetaMethod(Right, "__lt") then
             return Left < Right
         end
@@ -775,6 +787,10 @@ Interpreter.BinaryFunctions = {
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
+            return Left <= Right
+        end
+
+        if LeftType == "string" and RightType == "string" then
             return Left <= Right
         end
 
