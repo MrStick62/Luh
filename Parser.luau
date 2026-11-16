@@ -391,7 +391,7 @@ function Parser.ParseTuple(Self: Parser): { Expression }
     local Expressions = {}
 
     repeat
-        table.insert(Expressions, Self:ParseXor())
+        table.insert(Expressions, Self:ParseExpression())
     until not (Self:Match(Token.Types.Comma) and Self:Advance())
 
     return Expressions
@@ -403,12 +403,12 @@ end
 
 function Parser.ParseAssignmentExpression(Self: Parser, Left: Expression?): Expression
     local Expression = Left or Self:ParseXor()
-    local Expressions = { Expression }
+    local Identifiers = { Expression }
 
     if Left then
         while Self:Match(Token.Types.Comma) do
             Self:Advance()
-            table.insert(Expressions, Self:ParseXor())
+            table.insert(Identifiers, Self:ParseXor())
         end
     end
     
@@ -417,7 +417,7 @@ function Parser.ParseAssignmentExpression(Self: Parser, Left: Expression?): Expr
 
         local Operator = Self:Advance()
 
-        for _, Identifier in Expressions do
+        for _, Identifier in Identifiers do
             if Identifier.Type == "LiteralExpression" then
                 if Identifier.Value.Type ~= Token.Types.Identifier then
                     Parser.Error(Identifier.Value, `Attempt to assign non-identifier literal`)
@@ -428,7 +428,7 @@ function Parser.ParseAssignmentExpression(Self: Parser, Left: Expression?): Expr
         end
 
         local Right = Left and Self:ParseTuple() or { Self:ParseAssignmentExpression() }
-        return Ast.AssignmentExpression(Expressions, Operator, Right)
+        return Ast.AssignmentExpression(Identifiers, Operator, Right)
     end
 
     return Expression

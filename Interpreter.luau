@@ -69,7 +69,11 @@ function Interpreter.New(): Interpreter
 end
 
 function Interpreter.LoadGlobal(Self: Interpreter, Identifier: string, Value: any)
-    Self.GlobalEnvironment:Define(Identifier, Value)
+    if typeof(Value) == "table" then
+        table.freeze(Value)
+    end
+
+    Self.GlobalEnvironment:Define(Identifier, Value, true)
 end
 
 function Interpreter.Run(Self: Interpreter, Statements: { Statement })
@@ -433,12 +437,19 @@ function Interpreter.EvaluateAssignmentExpression(Self: Interpreter, Expression:
 
     local Right = Self:EvaluateTupleExpression(Expression.Right)
 
+    local Results = {}
     for i, Identifier in Expression.Left do
         local Left = Self:EvaluateExpression(Identifier)
-        AssignmentFunction(Self, Left, Expression.Operator, Right[i])
+        local Result = AssignmentFunction(Left:Get(), Expression.Operator, Right[i])
+
+        if not Left:Set(Result) then
+            Interpreter.Error(Expression.Operator, `Attempt to assign non-mutable value`)
+        end
+
+        Results[i] = Result
     end
     
-    return Reference.New(nil)
+    return Reference.Tuple(table.unpack(Results, 1, #Expression.Left))
 end
 
 function Interpreter.EvaluateLiteralExpression(Self: Interpreter, Expression: LiteralExpression): Reference
@@ -549,112 +560,140 @@ function Interpreter.HasMetaMethod(Table: any, Method: string): boolean
     return false
 end
 
+function Interpreter.TryAdd(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+        return Left + Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__add") or Interpreter.HasMetaMethod(Right, "__add") then
+        return Left + Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
+    return nil
+end
+
+function Interpreter.TrySubtract(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+        return Left - Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__sub") or Interpreter.HasMetaMethod(Right, "__sub") then
+        return Left - Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)     
+    return nil
+end
+
+function Interpreter.TryMultiply(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+        return Left * Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__mul") or Interpreter.HasMetaMethod(Right, "__mul") then
+        return Left * Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)          
+    return nil
+end
+
+function Interpreter.TryDivide(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+        return Left / Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__div") or Interpreter.HasMetaMethod(Right, "__div") then
+        return Left / Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)   
+    return nil
+end
+
+function Interpreter.TryFloorDivide(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+            return Left // Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__idiv") or Interpreter.HasMetaMethod(Right, "__idiv") then
+        return Left // Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)          
+    return nil
+end
+
+function Interpreter.TryModulo(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+        return Left % Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__mod") or Interpreter.HasMetaMethod(Right, "__mod") then
+        return Left % Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)   
+    return nil
+end
+
+function Interpreter.TryPower(Left: any, Operator: Token, Right: any): any
+    local LeftType, RightType = typeof(Left), typeof(Right)
+    if LeftType == "number" and RightType == "number" then
+        return Left ^ Right
+    end
+
+    if Interpreter.HasMetaMethod(Left, "__pow") or Interpreter.HasMetaMethod(Right, "__pow") then
+        return Left ^ Right
+    end
+
+    Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
+    return nil
+end
+
 Interpreter.BinaryFunctions = {
     [Token.Types.Plus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         -- Why am I manually passing self only here? Try fixing it. See what kind of wrath the Luau Language Server inflicts upon you. God help us all.
         local Right = Interpreter.EvaluateExpression(Self, RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left + Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__add") or Interpreter.HasMetaMethod(Right, "__add") then
-            return Left + Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
-        return nil
+        return Interpreter.TryAdd(Left, Operator, Right)
     end,
     [Token.Types.Minus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left - Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__sub") or Interpreter.HasMetaMethod(Right, "__sub") then
-            return Left - Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)     
-        return nil
+        return Interpreter.TrySubtract(Left, Operator, Right)
     end,
     [Token.Types.Star] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left * Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__mul") or Interpreter.HasMetaMethod(Right, "__mul") then
-            return Left * Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)          
-        return nil
+        return Interpreter.TryMultiply(Left, Operator, Right)
     end,
     [Token.Types.Slash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left / Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__div") or Interpreter.HasMetaMethod(Right, "__div") then
-            return Left / Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)   
-        return nil
+        return Interpreter.TryDivide(Left, Operator, Right)
     end,
     [Token.Types.DoubleSlash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-             return Left // Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__idiv") or Interpreter.HasMetaMethod(Right, "__idiv") then
-            return Left // Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)          
-        return nil
+        return Interpreter.TryFloorDivide(Left, Operator, Right)
     end,
     [Token.Types.Modulo] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left % Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__mod") or Interpreter.HasMetaMethod(Right, "__mod") then
-            return Left % Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)   
-        return nil
+        return Interpreter.TryModulo(Left, Operator, Right)
     end,
     [Token.Types.Karat] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
 
-        local LeftType, RightType = typeof(Left), typeof(Right)
-        if LeftType == "number" and RightType == "number" then
-            return Left ^ Right
-        end
-
-        if Interpreter.HasMetaMethod(Left, "__pow") or Interpreter.HasMetaMethod(Right, "__pow") then
-            return Left ^ Right
-        end
-
-        Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
-        return nil
+        return Interpreter.TryPower(Left, Operator, Right)
     end,
     [Token.Types.DoubleDot] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
         local Right = Self:EvaluateExpression(RightExpr):Get()
@@ -760,11 +799,11 @@ Interpreter.UnaryFunctions = {
     end,
     [Token.Types.Minus] = function(Self: Interpreter, Operator: Token, Value: any): any
         if Interpreter.HasMetaMethod(Value, "__unm") then
-            return Value.__unm(Operator, { Value })
+            return -Value
         end
 
         if Interpreter.HasMetaMethod(Value, "__mul") then
-            return Value.__mul(Operator, { -1, Value })
+            return -1 * Value
         end
 
         if typeof(Value) ~= "number" then
@@ -782,128 +821,20 @@ Interpreter.UnaryFunctions = {
             Interpreter.Error(Operator, `Attempt to get the size of {typeof(Value)}`)
         end
 
-        if Interpreter.HasMetaMethod(Value, "__len") then
-            return Value.__len(Operator, { Value })
-        end
-
         return #Value
     end
 } :: { [number]: (Self: Interpreter, Operator: Token, Value: any) -> any }
 
 Interpreter.AssignmentFunctions = {
-    [Token.Types.Equals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        if not Left:Set(Value) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-        
-        return Left
-    end,
-    [Token.Types.PlusEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to add {LeftType} and {RightType}`)
-        end
-        
-        local Result = LeftValue + Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-    [Token.Types.MinusEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to subtract {LeftType} and {RightType}`)
-        end
-        
-        local Result = LeftValue - Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-    [Token.Types.StarEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to multiply {LeftType} and {RightType}`)
-        end
-        
-        local Result = LeftValue * Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-    [Token.Types.SlashEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
-        end
-        
-        local Result = LeftValue / Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-    [Token.Types.DoubleSlashEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to divide {LeftType} and {RightType}`)
-        end
-        
-        local Result = LeftValue // Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-    [Token.Types.ModuloEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to compute the remainder of {LeftType} and {RightType}`)
-        end
-        
-        local Result = LeftValue % Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-    [Token.Types.KaratEquals] = function(Self: Interpreter, Left: Reference, Operator: Token, Value: any): Reference
-        local LeftValue = Left:Get()
-
-        local LeftType, RightType = typeof(LeftValue), typeof(Value)
-        if LeftType ~= "number" or RightType ~= "number" then
-            Interpreter.Error(Operator, `Attempt to raise {LeftType} to the power of {RightType}`)
-        end
-        
-        local Result = LeftValue ^ Value
-        if not Left:Set(Result) then
-            Interpreter.Error(Operator, `Attempt to assign non-mutable value`)
-        end
-
-        return Result
-    end,
-} :: { [number]: (Self: Interpreter, Identifier: Reference, Operator: Token, Value: any) -> any }
+    [Token.Types.Equals] = function(Left: any, Operator: Token, Right: any) return Right end,
+    [Token.Types.PlusEquals] = Interpreter.TryAdd,
+    [Token.Types.MinusEquals] = Interpreter.TrySubtract,
+    [Token.Types.StarEquals] = Interpreter.TryMultiply,
+    [Token.Types.SlashEquals] = Interpreter.TryDivide,
+    [Token.Types.DoubleSlashEquals] = Interpreter.TryFloorDivide,
+    [Token.Types.ModuloEquals] = Interpreter.TryModulo,
+    [Token.Types.KaratEquals] = Interpreter.TryPower,
+} :: { [number]: (Left: any, Operator: Token, Right: any) -> any }
 
 Interpreter.LiteralEvaluations = {
     [Token.Types.Number] = function(Self: Interpreter, Token: Token): Reference

@@ -73,7 +73,7 @@ function Reference.GetAll(Self: Reference): Tuple
 end
 
 function Reference.Set(Self: Reference, Value: any): boolean
-    if Self.Mutable then
+    if Self.Mutable and not table.isfrozen(Self.Wrapper) then
         Self.Wrapper[Self.Indices[1]] = Value
         return true
     end
