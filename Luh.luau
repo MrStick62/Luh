@@ -18,7 +18,7 @@ type Statement = Ast.Statement
 local Interpreter = require("./Interpreter")
 type Interpreter = Interpreter.Interpreter
 
-local Globals = require("./Globals")
+local StandardLibrary = require("./StandardLibrary")
 
 local LuhState = {}
 LuhState.__index = LuhState
@@ -60,7 +60,7 @@ function LuhState.New(Source: string): LuhState?
 
     Self.Interpreter = Interpreter.New(Self.Error)
 
-    Globals.Load(Self.Interpreter)
+    StandardLibrary.Load(Self.Interpreter)
 
     return setmetatable(Self, LuhState)
 end

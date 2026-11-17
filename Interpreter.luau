@@ -69,7 +69,7 @@ function Interpreter.New(Error: Error): Interpreter
     return setmetatable(Self, Interpreter)
 end
 
-function Interpreter.LoadGlobal(Self: Interpreter, Identifier: string, Value: any)
+function Interpreter.LoadLibrary(Self: Interpreter, Identifier: string, Value: any)
     if typeof(Value) == "table" then
         table.freeze(Value)
     end
