@@ -12,6 +12,9 @@ type Lexer = Lexer.Lexer
 local Parser = require("./Parser")
 type Parser = Parser.Parser
 
+local Ast = require("./Ast")
+type Statement = Ast.Statement
+
 local Interpreter = require("./Interpreter")
 type Interpreter = Interpreter.Interpreter
 
@@ -24,6 +27,7 @@ type LuhStateData = {
     Error: Error,
     Lexer: Lexer,
     Parser: Parser,
+    Ast: { Statement },
     Interpreter: Interpreter,
 }
 
@@ -48,7 +52,7 @@ function LuhState.New(Source: string): LuhState?
     end
 
     Self.Parser = Parser.New(Tokens, Self.Error)
-    local Ast = Self.Parser:Parse()
+    Self.Ast = Self.Parser:Parse()
 
     if Self.Error.ShouldHalt then
         return nil
@@ -58,9 +62,11 @@ function LuhState.New(Source: string): LuhState?
 
     Globals.Load(Self.Interpreter)
 
-    Self.Interpreter:Run(Ast)
-
     return setmetatable(Self, LuhState)
+end
+
+function LuhState.Run(Self: LuhState)
+    return Self.Interpreter:Run(Self.Ast)
 end
 
 function LuhState.GetGlobal(Self: LuhState, Identifier: string)
@@ -70,6 +76,7 @@ function LuhState.GetGlobal(Self: LuhState, Identifier: string)
 end
 
 function LuhState.SetGlobal(Self: LuhState, Identifier: string, Value: any)
+    Self.Interpreter.GlobalEnvironment:Define(Identifier, Value)
 end
 
 local Luh = {}
