@@ -2,4 +2,7 @@
 
 local Luh = require("./Luh")
 
-Luh.Run(require("./Script").Content)
+local State = Luh.NewState(require("./Script").Content)
+
+
+--Luh.Run(require("./Script").Content)

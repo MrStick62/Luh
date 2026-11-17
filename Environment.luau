@@ -18,9 +18,7 @@ function Environment.New(Outside: Environment?): Environment
     Self.Map = {}
 
     if Outside then
-        for Index, Reference in Outside.Map do
-            Self.Map[Index] = Reference
-        end
+        Self.Map = table.clone(Outside.Map)
     end
 
     return setmetatable(Self, Environment)

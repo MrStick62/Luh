@@ -4,10 +4,14 @@ local Location = require("./Location")
 type Location = Location.Location
 
 local Error = {}
+Error.__index = Error
 
-local Listeners = {}
+type ErrorData = {
+    ShouldHalt: boolean,
+    Listeners: { (Location: Location, Message: string) -> () }
+}
 
-Error.ShouldHalt = false
+export type Error = typeof(setmetatable({} :: ErrorData, Error))
 
 Error.Type = {
     Lexer = 1,
@@ -21,20 +25,30 @@ local TypeText = {
     [Error.Type.Runtime] = "Runtime",
 }
 
-function Error.Listen(Function: (Location: Location, Message: string) -> ())
-    table.insert(Listeners, Function)
+
+function Error.New(): Error
+    local Self = {}
+
+    Self.ShouldHalt = false
+    Self.Listeners = {}
+
+    return setmetatable(Self, Error)
 end
 
-function Error.Broadcast(Location: Location, Message: string)
-    for _, Listener in Listeners do
+function Error.Listen(Self: Error, Function: (Location: Location, Message: string) -> ())
+    table.insert(Self.Listeners, Function)
+end
+
+function Error.Broadcast(Self: Error, Location: Location, Message: string)
+    for _, Listener in Self.Listeners do
         Listener(Location, Message)
     end
 end
 
-function Error.Report(Location: Location, Message: string, Type: number)
-    Error.Broadcast(Location, `[line {Location.Line}] {TypeText[Type]} Error: {Message}`)
+function Error.Report(Self: Error, Location: Location, Message: string, Type: number)
+    Self:Broadcast(Location, `[line {Location.Line}] {TypeText[Type]} Error: {Message}`)
 
-    Error.ShouldHalt = true
+    Self.ShouldHalt = true
 end
 
 return Error

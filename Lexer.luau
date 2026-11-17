@@ -1,6 +1,7 @@
 --!strict
 
 local Error = require("./Error")
+type Error = Error.Error
 
 local Location = require("./Location")
 type Location = Location.Location
@@ -19,11 +20,13 @@ type LexerData = {
     Current: number,
     Line: number,
     LineStart: number,
+
+    Error: Error,
 }
 
 export type Lexer = typeof(setmetatable({} :: LexerData, Lexer))
 
-function Lexer.New(Source: string): Lexer
+function Lexer.New(Source: string, Error: Error): Lexer
     local Self = {}
 
     Self.Source = Source
@@ -33,6 +36,8 @@ function Lexer.New(Source: string): Lexer
     Self.Current = 1
     Self.Line = 1
     Self.LineStart = Self.Start
+
+    Self.Error = Error
 
     return setmetatable(Self, Lexer)
 end
@@ -69,7 +74,7 @@ function Lexer.ScanToken(Self: Lexer)
         return
     end
 
-    Error.Report(Self:GetCurrentLocation(), `Unexpected character '{Char}'`, Error.Type.Lexer)
+    Self.Error:Report(Self:GetCurrentLocation(), `Unexpected character '{Char}'`, Error.Type.Lexer)
     Self:Consume()
 end
 
@@ -296,7 +301,7 @@ Lexer.ReadChar = {
         end
 
         local Char = Self.Source:sub(Self.Current, Self.Current)
-        Error.Report(Self:GetCurrentLocation(), `Expected '=' to follow '~', but got '{Char}'`, Error.Type.Lexer)
+        Self.Error:Report(Self:GetCurrentLocation(), `Expected '=' to follow '~', but got '{Char}'`, Error.Type.Lexer)
     end,
     ['>'] = function(Self: Lexer)
         Self:Consume()
@@ -349,7 +354,7 @@ Lexer.ReadChar = {
         end
 
         if Self:IsAtEnd() then
-            Error.Report(Self:GetCurrentLocation(), "Unterminated string", Error.Type.Lexer)
+            Self.Error:Report(Self:GetCurrentLocation(), "Unterminated string", Error.Type.Lexer)
             return
         end
 

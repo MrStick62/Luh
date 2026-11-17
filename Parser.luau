@@ -1,6 +1,8 @@
 --!strict
 
 local Error = require("./Error")
+type Error = Error.Error
+
 local Token = require("./Token")
 type Token = Token.Token
 
@@ -29,15 +31,17 @@ Parser.__index = Parser
 type ParserData = {
     Current: number,
     Tokens: { Token },
+    Error: Error,
 }
 
 export type Parser = typeof(setmetatable({} :: ParserData, Parser))
 
-function Parser.New(Tokens: { Token }): Parser
+function Parser.New(Tokens: { Token }, Error: Error): Parser
     local Self = {}
 
     Self.Current = 1
     Self.Tokens = Tokens
+    Self.Error = Error
 
     return setmetatable(Self, Parser)
 end
@@ -94,7 +98,7 @@ function Parser.Parse(Self: Parser): { Statement }
         end)
 
     if not Ok then
-        Error.Report(Err.Token.Location, Err.Message, Error.Type.Syntax)
+        Self.Error:Report(Err.Token.Location, Err.Message, Error.Type.Syntax)
     end
 
     return Statements

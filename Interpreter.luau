@@ -1,6 +1,7 @@
 --!strict
 
 local Error = require("./Error")
+type Error = Error.Error
 
 local Reference = require("./Reference")
 type Reference = Reference.Reference
@@ -54,16 +55,16 @@ Interpreter.__index = Interpreter
 
 type InterpreterData = {
     GlobalEnvironment: Environment,
-    Environment: Environment,
+    Error: Error,
 }
 
 export type Interpreter = typeof(setmetatable({} :: InterpreterData, Interpreter))
 
-function Interpreter.New(): Interpreter
+function Interpreter.New(Error: Error): Interpreter
     local Self = {}
 
     Self.GlobalEnvironment = Environment.New()
-    Self.Environment = Self.GlobalEnvironment
+    Self.Error = Error
 
     return setmetatable(Self, Interpreter)
 end
@@ -79,8 +80,9 @@ end
 function Interpreter.Run(Self: Interpreter, Statements: { Statement })
     local Ok, Err: Jump | RuntimeError = xpcall(
         function()
+            local Environment = Environment.New()
             for _, Statement in Statements do
-                Self:EvaluateStatement(Statement)
+                Self:EvaluateStatement(Environment, Statement)
             end
         end,
         function(Err)
@@ -96,10 +98,10 @@ function Interpreter.Run(Self: Interpreter, Statements: { Statement })
             if Err.Keyword.Type == Token.Types.Return then
                 return Err.Tuple
             else
-                Error.Report(Err.Keyword.Location, `Attempt to call {Err.Keyword.Lexeme} statement outside of a loop`, Error.Type.Runtime)
+                Self.Error:Report(Err.Keyword.Location, `Attempt to call {Err.Keyword.Lexeme} statement outside of a loop`, Error.Type.Runtime)
             end
         elseif Err.Type == "__runtimeerror" then
-            Error.Report(Err.Token.Location, Err.Message, Error.Type.Runtime)
+            Self.Error:Report(Err.Token.Location, Err.Message, Error.Type.Runtime)
         else
             error(Err, 0)
         end
@@ -128,35 +130,35 @@ end
 -- Evaluating Statements --
 ---------------------------
 
-function Interpreter.EvaluateStatement(Self: Interpreter, Statement: Statement): ()
+function Interpreter.EvaluateStatement(Self: Interpreter, Environment: Environment, Statement: Statement): ()
     local Function = Interpreter.StatementMap[Statement.Type]
-    Function(Self, Statement)
+    Function(Self, Environment, Statement)
 end
 
-function Interpreter.EvaluateExpressionStatement(Self: Interpreter, Statement: ExpressionStatement)
-    Self:EvaluateExpression(Statement.Expression)
+function Interpreter.EvaluateExpressionStatement(Self: Interpreter, Environment: Environment, Statement: ExpressionStatement)
+    Self:EvaluateExpression(Environment, Statement.Expression)
 end
 
-function Interpreter.EvaluateVariableStatement(Self: Interpreter, Statement: VariableStatement)
-    local Right = Self:EvaluateTupleExpression(Statement.Initializers)
+function Interpreter.EvaluateVariableStatement(Self: Interpreter, Environment: Environment, Statement: VariableStatement)
+    local Right = Self:EvaluateTupleExpression(Environment, Statement.Initializers)
 
     for i, Identifier in Statement.Identifiers do
-        Self.Environment:Define(Identifier.Lexeme, Right[i])
+        Environment:Define(Identifier.Lexeme, Right[i])
     end
 end
 
-function Interpreter.EvaluateDoStatement(Self: Interpreter, Statement: DoStatement)
-    local Scope = Environment.New(Self.Environment)
+function Interpreter.EvaluateDoStatement(Self: Interpreter, Environment: Environment, Statement: DoStatement)
+    local Scope = Environment.New(Environment)
     Self:EvaluateBlock(Statement.Statements, Scope)
 end
 
-function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStatement)
-    local Scope = Environment.New(Self.Environment)
-    if Self:EvaluateExpression(Statement.Default.Condition):Get() then
+function Interpreter.EvaluateIfStatement(Self: Interpreter, Environment: Environment, Statement: IfStatement)
+    local Scope = Environment.New(Environment)
+    if Self:EvaluateExpression(Environment, Statement.Default.Condition):Get() then
         Self:EvaluateBlock(Statement.Default.Body, Scope)
     else
         for _, Elseif in Statement.Elseif do
-            if Self:EvaluateExpression(Elseif.Condition):Get() then
+            if Self:EvaluateExpression(Environment, Elseif.Condition):Get() then
                 Self:EvaluateBlock(Elseif.Body, Scope)
                 return
             end
@@ -166,9 +168,9 @@ function Interpreter.EvaluateIfStatement(Self: Interpreter, Statement: IfStateme
     end
 end
 
-function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileStatement)
-    while Self:EvaluateExpression(Statement.Condition):Get() do
-        local Scope = Environment.New(Self.Environment)
+function Interpreter.EvaluateWhileStatement(Self: Interpreter, Environment: Environment, Statement: WhileStatement)
+    while Self:EvaluateExpression(Environment, Statement.Condition):Get() do
+        local Scope = Environment.New(Environment)
         local Jump = Self:CatchJump(Statement.Body, Scope)
         if Jump then
             if Jump.Keyword.Type == Token.Types.Break then
@@ -182,18 +184,18 @@ function Interpreter.EvaluateWhileStatement(Self: Interpreter, Statement: WhileS
     end
 end
 
-function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForStatement)
-    local CounterValue = Self:EvaluateExpression(Statement.Initial):Get()
+function Interpreter.EvaluateForStatement(Self: Interpreter, Environment: Environment, Statement: ForStatement)
+    local CounterValue = Self:EvaluateExpression(Environment, Statement.Initial):Get()
     if typeof(CounterValue) ~= "number" then
         Interpreter.Error(Statement.Keyword, `Expected number for 'for' counter, got {typeof(CounterValue)}`)
     end
 
-    local Limit = Self:EvaluateExpression(Statement.Limit):Get()
+    local Limit = Self:EvaluateExpression(Environment, Statement.Limit):Get()
     if typeof(Limit) ~= "number" then
         Interpreter.Error(Statement.Keyword, `Expected number for 'for' limit, got {typeof(Limit)}`)
     end
 
-    local Increment = Statement.Increment and Self:EvaluateExpression(Statement.Increment):Get() or 1
+    local Increment = Statement.Increment and Self:EvaluateExpression(Environment, Statement.Increment):Get() or 1
     if typeof(Increment) ~= "number" then
         Interpreter.Error(Statement.Keyword, `Expected number for 'for' increment, got {typeof(Increment)}`)
     end
@@ -205,7 +207,7 @@ function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForState
             break
         end
 
-        local Scope = Environment.New(Self.Environment)
+        local Scope = Environment.New(Environment)
         Scope:Define(Statement.Identifier.Lexeme, CounterValue)
         local Jump = Self:CatchJump(Statement.Body, Scope)
         
@@ -223,8 +225,8 @@ function Interpreter.EvaluateForStatement(Self: Interpreter, Statement: ForState
     end
 end
 
-function Interpreter.EvaluateForEachStatement(Self: Interpreter, Statement: ForEachStatement)
-    local Target = Self:EvaluateTupleExpression(Statement.Arguments)
+function Interpreter.EvaluateForEachStatement(Self: Interpreter, Environment: Environment, Statement: ForEachStatement)
+    local Target = Self:EvaluateTupleExpression(Environment, Statement.Arguments)
 
     local Iterator = next
 
@@ -248,7 +250,7 @@ function Interpreter.EvaluateForEachStatement(Self: Interpreter, Statement: ForE
             break
         end
 
-        local Scope = Environment.New(Self.Environment)
+        local Scope = Environment.New(Environment)
 
         for i = 1, #Statement.Identifiers do
             Scope:Define(Statement.Identifiers[i].Lexeme, Results[i])
@@ -267,15 +269,15 @@ function Interpreter.EvaluateForEachStatement(Self: Interpreter, Statement: ForE
     end
 end
 
-function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: FunctionStatement)
+function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Environment: Environment, Statement: FunctionStatement)
     local Source = Statement.Identifiers[1]
 
     if #Statement.Identifiers == 1 then
-        Self.Environment:Define(Source.Lexeme, Self:FunctionToValue(Statement.Parameters, Statement.Body))
+        Self.GlobalEnvironment:Define(Source.Lexeme, Self:FunctionToValue(Environment, Statement.Parameters, Statement.Body))
         return
     end
 
-    local Table = Self.Environment:Find(Source.Lexeme)
+    local Table = Environment:Find(Source.Lexeme) or Self.GlobalEnvironment:Find(Source.Lexeme)
 
     if not Table then
         Interpreter.Error(Source, `Attempt to access undefined variable '{Source.Lexeme}'`)
@@ -296,34 +298,27 @@ function Interpreter.EvaluateFunctionStatement(Self: Interpreter, Statement: Fun
         Interpreter.Error(Identifier, `Attempt to index {typeof(Current)} with '{Identifier.Lexeme}'`)
     end
 
-    Current[Identifier.Lexeme] = Self:FunctionToValue(Statement.Parameters, Statement.Body)
+    Current[Identifier.Lexeme] = Self:FunctionToValue(Environment, Statement.Parameters, Statement.Body)
 end
 
-function Interpreter.EvaluateJumpStatement(Self: Interpreter, Statement: JumpStatement)
+function Interpreter.EvaluateJumpStatement(Self: Interpreter, Environment: Environment, Statement: JumpStatement)
     local Tuple = {}
     Tuple.n = #Statement.Tuple
 
     for i, Value in Statement.Tuple do
-        Tuple[i] = Self:EvaluateExpression(Value):Get()
+        Tuple[i] = Self:EvaluateExpression(Environment, Value):Get()
     end
 
     Interpreter.Jump(Statement.Keyword, Tuple)
 end
 
 function Interpreter.EvaluateBlock(Self: Interpreter, Statements: { Statement }, Environment: Environment)
-    local Outside = Self.Environment
-    Self.Environment = Environment
-
     for _, Statement in Statements do
-        Self:EvaluateStatement(Statement)
+        Self:EvaluateStatement(Environment, Statement)
     end
-
-    Self.Environment = Outside
 end
 
 function Interpreter.CatchJump(Self: Interpreter, Statements: { Statement }, Environment: Environment): Jump?
-    local PreviousEnvironment = Self.Environment
-
     local Ok, Err: RuntimeError | Jump = xpcall(
         function()
             Self:EvaluateBlock(Statements, Environment)
@@ -335,8 +330,6 @@ function Interpreter.CatchJump(Self: Interpreter, Statements: { Statement }, Env
 
             return debug.traceback(tostring(Err), 2)
         end)
-
-    Self.Environment = PreviousEnvironment
 
     if not Ok then
         if Err.Type == "__jump" then
@@ -351,8 +344,8 @@ function Interpreter.CatchJump(Self: Interpreter, Statements: { Statement }, Env
     return nil
 end
 
-function Interpreter.FunctionToValue(Self: Interpreter, Parameters: { Token }, Body: { Statement }): (Token, { any }) -> (any)
-    local Outside = Environment.New(Self.Environment)
+function Interpreter.FunctionToValue(Self: Interpreter, Environment: Environment, Parameters: { Token }, Body: { Statement }): (Token, { any }) -> (any)
+    local Outside = Environment.New(Environment)
 
     return function(...: any): ...any
         local Arguments = {...}
@@ -384,24 +377,24 @@ Interpreter.StatementMap = {
     ForEachStatement = Interpreter.EvaluateForEachStatement,
     FunctionStatement = Interpreter.EvaluateFunctionStatement,
     JumpStatement = Interpreter.EvaluateJumpStatement,
-} :: { [string]: (Self: Interpreter, Statement: Statement) -> () }
+} :: { [string]: (Self: Interpreter, Environment: Environment, Statement: Statement) -> () }
 
 ----------------------------
 -- Evaluating Expressions --
 ----------------------------
 
-function Interpreter.EvaluateTupleExpression(Self: Interpreter, Expressions: { Expression }, Offset: number?): Tuple
+function Interpreter.EvaluateTupleExpression(Self: Interpreter, Environment: Environment, Expressions: { Expression }, Offset: number?): Tuple
     local Results = {}
 
     local Index = 1 + (Offset or 0)
 
     if #Expressions > 0 then
         for i = 1, #Expressions - 1 do
-            Results[Index] = Self:EvaluateExpression(Expressions[i]):Get()
+            Results[Index] = Self:EvaluateExpression(Environment, Expressions[i]):Get()
             Index += 1
         end
 
-        local Tuple = Self:EvaluateExpression(Expressions[#Expressions]):GetAll()
+        local Tuple = Self:EvaluateExpression(Environment, Expressions[#Expressions]):GetAll()
         for i = 1, Tuple.n do
             Results[Index] = Tuple[i]
             Index += 1
@@ -412,34 +405,34 @@ function Interpreter.EvaluateTupleExpression(Self: Interpreter, Expressions: { E
     return Results
 end
 
-function Interpreter.EvaluateExpression(Self: Interpreter, Expression: Expression): Reference
+function Interpreter.EvaluateExpression(Self: Interpreter, Environment: Environment, Expression: Expression): Reference
     local Function = Interpreter.ExpressionMap[Expression.Type]
-    return Function and Function(Self, Expression)
+    return Function and Function(Self, Environment, Expression)
 end
 
-function Interpreter.EvaluateBinaryExpression(Self: Interpreter, Expression: BinaryExpression): Reference
+function Interpreter.EvaluateBinaryExpression(Self: Interpreter, Environment: Environment, Expression: BinaryExpression): Reference
     local BinaryFunction = Interpreter.BinaryFunctions[Expression.Operator.Type]
-    local Left = Self:EvaluateExpression(Expression.Left):Get()
-    return BinaryFunction and Reference.New(BinaryFunction(Self, Expression.Operator, Left, Expression.Right))
+    local Left = Self:EvaluateExpression(Environment, Expression.Left):Get()
+    return BinaryFunction and Reference.New(BinaryFunction(Self, Environment, Expression.Operator, Left, Expression.Right))
 end
 
-function Interpreter.EvaluateUnaryExpression(Self: Interpreter, Expression: UnaryExpression): Reference
+function Interpreter.EvaluateUnaryExpression(Self: Interpreter, Environment: Environment, Expression: UnaryExpression): Reference
     local UnaryFunction = Interpreter.UnaryFunctions[Expression.Operator.Type]
-    return UnaryFunction and Reference.New(UnaryFunction(Self, Expression.Operator, Self:EvaluateExpression(Expression.Expression):Get()))
+    return UnaryFunction and Reference.New(UnaryFunction(Self, Expression.Operator, Self:EvaluateExpression(Environment, Expression.Expression):Get()))
 end
 
-function Interpreter.EvaluateAssignmentExpression(Self: Interpreter, Expression: AssignmentExpression): Reference
+function Interpreter.EvaluateAssignmentExpression(Self: Interpreter, Environment: Environment, Expression: AssignmentExpression): Reference
     local AssignmentFunction = Interpreter.AssignmentFunctions[Expression.Operator.Type]
 
     if not AssignmentFunction then
         return Reference.New(nil)
     end
 
-    local Right = Self:EvaluateTupleExpression(Expression.Right)
+    local Right = Self:EvaluateTupleExpression(Environment, Expression.Right)
 
     local Results = {}
     for i, Identifier in Expression.Left do
-        local Left = Self:EvaluateExpression(Identifier)
+        local Left = Self:EvaluateExpression(Environment, Identifier)
         local Result = AssignmentFunction(Left:Get(), Expression.Operator, Right[i])
 
         if not Left:Set(Result) then
@@ -452,19 +445,19 @@ function Interpreter.EvaluateAssignmentExpression(Self: Interpreter, Expression:
     return Reference.Tuple(table.unpack(Results, 1, #Expression.Left))
 end
 
-function Interpreter.EvaluateLiteralExpression(Self: Interpreter, Expression: LiteralExpression): Reference
+function Interpreter.EvaluateLiteralExpression(Self: Interpreter, Environment: Environment, Expression: LiteralExpression): Reference
     local Evaluation = Interpreter.LiteralEvaluations[Expression.Value.Type]
-    return Evaluation and Evaluation(Self, Expression.Value)
+    return Evaluation and Evaluation(Self, Environment, Expression.Value)
 end
 
-function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallExpression): Reference
-    local Function = Self:EvaluateExpression(Expression.Function):Get()
+function Interpreter.EvaluateCallExpression(Self: Interpreter, Environment: Environment, Expression: CallExpression): Reference
+    local Function = Self:EvaluateExpression(Environment, Expression.Function):Get()
 
     if typeof(Function) ~= "function" then
         Interpreter.Error(Expression.Token, `Attempt to call a {typeof(Function)} value`)
     end
 
-    local Arguments = Self:EvaluateTupleExpression(Expression.Arguments)
+    local Arguments = Self:EvaluateTupleExpression(Environment, Expression.Arguments)
 
     local Result = Reference.New(nil)
 
@@ -483,8 +476,8 @@ function Interpreter.EvaluateCallExpression(Self: Interpreter, Expression: CallE
     return Result
 end
 
-function Interpreter.EvaluateSelfCallExpression(Self: Interpreter, Expression: SelfCallExpression): Reference
-    local Table = Self:EvaluateExpression(Expression.Left):Get()
+function Interpreter.EvaluateSelfCallExpression(Self: Interpreter, Environment: Environment, Expression: SelfCallExpression): Reference
+    local Table = Self:EvaluateExpression(Environment, Expression.Left):Get()
 
     if typeof(Table) ~= "table" then
         Interpreter.Error(Expression.Operator, `Attempt to index {typeof(Table)} with '{Expression.Name.Lexeme}'`)
@@ -496,14 +489,14 @@ function Interpreter.EvaluateSelfCallExpression(Self: Interpreter, Expression: S
         Interpreter.Error(Expression.Operator, `Attempt to call a {typeof(Function)} value`)
     end
 
-    local Arguments = Self:EvaluateTupleExpression(Expression.Arguments, 1)
+    local Arguments = Self:EvaluateTupleExpression(Environment, Expression.Arguments, 1)
     Arguments[1] = Table
 
     return Reference.Tuple(Function(table.unpack(Arguments, 1, Arguments.n)))
 end
 
-function Interpreter.EvaluateGetExpression(Self: Interpreter, Expression: GetExpression): Reference
-    local Table = Self:EvaluateExpression(Expression.Left):Get()
+function Interpreter.EvaluateGetExpression(Self: Interpreter, Environment: Environment, Expression: GetExpression): Reference
+    local Table = Self:EvaluateExpression(Environment, Expression.Left):Get()
 
     if typeof(Table) ~= "table" then
         Interpreter.Error(Expression.Operator, `Attempt to index {typeof(Table)} with '{Expression.Name.Lexeme}'`)
@@ -512,9 +505,9 @@ function Interpreter.EvaluateGetExpression(Self: Interpreter, Expression: GetExp
     return Reference.FromTable(Table, Expression.Name.Lexeme)
 end
 
-function Interpreter.EvaluateIndexExpression(Self: Interpreter, Expression: IndexExpression): Reference
-    local Table = Self:EvaluateExpression(Expression.Left):Get()
-    local Index = Self:EvaluateExpression(Expression.Index):Get()
+function Interpreter.EvaluateIndexExpression(Self: Interpreter, Environment: Environment, Expression: IndexExpression): Reference
+    local Table = Self:EvaluateExpression(Environment, Expression.Left):Get()
+    local Index = Self:EvaluateExpression(Environment, Expression.Index):Get()
 
     if typeof(Table) ~= "table" then
         Interpreter.Error(Expression.Operator, `Attempt to index {typeof(Table)} with {typeof(Index)}`)
@@ -523,11 +516,11 @@ function Interpreter.EvaluateIndexExpression(Self: Interpreter, Expression: Inde
     return Reference.FromTable(Table, Index)
 end
 
-function Interpreter.EvaluateFunctionExpression(Self: Interpreter, Expression: FunctionExpression): Reference
-    return Reference.New(Self:FunctionToValue(Expression.Parameters, Expression.Body))
+function Interpreter.EvaluateFunctionExpression(Self: Interpreter, Environment: Environment, Expression: FunctionExpression): Reference
+    return Reference.New(Self:FunctionToValue(Environment, Expression.Parameters, Expression.Body))
 end
 
-function Interpreter.EvaluateTableExpression(Self: Interpreter, Expression: TableExpression): Reference
+function Interpreter.EvaluateTableExpression(Self: Interpreter, Environment: Environment, Expression: TableExpression): Reference
     local Table = {}
 
     local ArrayIndex = 1
@@ -539,13 +532,13 @@ function Interpreter.EvaluateTableExpression(Self: Interpreter, Expression: Tabl
             if Pair.Key.Type == "LiteralExpression" then
                 Key = Pair.Key.Value.Lexeme
             else
-                Key = Self:EvaluateExpression(Pair.Key):Get()
+                Key = Self:EvaluateExpression(Environment, Pair.Key):Get()
             end
         else
             ArrayIndex += 1
         end
 
-        Table[Key] = Self:EvaluateExpression(Pair.Value):Get()
+        Table[Key] = Self:EvaluateExpression(Environment, Pair.Value):Get()
     end
 
     return Reference.New(Table)
@@ -659,44 +652,44 @@ function Interpreter.TryPower(Left: any, Operator: Token, Right: any): any
 end
 
 Interpreter.BinaryFunctions = {
-    [Token.Types.Plus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
+    [Token.Types.Plus] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
         -- Why am I manually passing self only here? Try fixing it. See what kind of wrath the Luau Language Server inflicts upon you. God help us all.
-        local Right = Interpreter.EvaluateExpression(Self, RightExpr):Get()
+        local Right = Interpreter.EvaluateExpression(Self, Environment, RightExpr):Get()
 
         return Interpreter.TryAdd(Left, Operator, Right)
     end,
-    [Token.Types.Minus] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Minus] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Interpreter.TrySubtract(Left, Operator, Right)
     end,
-    [Token.Types.Star] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Star] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Interpreter.TryMultiply(Left, Operator, Right)
     end,
-    [Token.Types.Slash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Slash] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Interpreter.TryDivide(Left, Operator, Right)
     end,
-    [Token.Types.DoubleSlash] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.DoubleSlash] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Interpreter.TryFloorDivide(Left, Operator, Right)
     end,
-    [Token.Types.Modulo] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Modulo] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Interpreter.TryModulo(Left, Operator, Right)
     end,
-    [Token.Types.Karat] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Karat] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Interpreter.TryPower(Left, Operator, Right)
     end,
-    [Token.Types.DoubleDot] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.DoubleDot] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         if Interpreter.HasMetaMethod(Left, "__concat") or Interpreter.HasMetaMethod(Right, "__concat") then
             return Left .. Right
@@ -704,29 +697,29 @@ Interpreter.BinaryFunctions = {
 
         return tostring(Left) .. tostring(Right)
     end,
-    [Token.Types.And] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left and Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.And] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        return Left and Self:EvaluateExpression(Environment, RightExpr):Get()
     end,
-    [Token.Types.Or] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        return Left or Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Or] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        return Left or Self:EvaluateExpression(Environment, RightExpr):Get()
     end,
-    [Token.Types.Xor] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Xor] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return not Left and Right or not Right and Left or (Left ~= Right or Left ~= true and Left ~= false) and nil
     end,
-    [Token.Types.Equal] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Equal] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Left == Right
     end,
-    [Token.Types.NotEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.NotEqual] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         return Left ~= Right
     end,
-    [Token.Types.Greater] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Greater] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
@@ -744,8 +737,8 @@ Interpreter.BinaryFunctions = {
         Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
         return nil
     end,
-    [Token.Types.GreaterEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.GreaterEqual] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
@@ -763,8 +756,8 @@ Interpreter.BinaryFunctions = {
         Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
         return nil
     end,
-    [Token.Types.Less] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.Less] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
@@ -782,8 +775,8 @@ Interpreter.BinaryFunctions = {
         Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)    
         return nil
     end,
-    [Token.Types.LessEqual] = function(Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression): any
-        local Right = Self:EvaluateExpression(RightExpr):Get()
+    [Token.Types.LessEqual] = function(Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression): any
+        local Right = Self:EvaluateExpression(Environment, RightExpr):Get()
 
         local LeftType, RightType = typeof(Left), typeof(Right)
         if LeftType == "number" and RightType == "number" then
@@ -801,7 +794,7 @@ Interpreter.BinaryFunctions = {
         Interpreter.Error(Operator, `Attempt to compare {LeftType} and {RightType}`)
         return nil
     end,
-} :: { [number]: (Self: Interpreter, Operator: Token, Left: any, RightExpr: Expression) -> any }
+} :: { [number]: (Self: Interpreter, Environment: Environment, Operator: Token, Left: any, RightExpr: Expression) -> any }
 
 Interpreter.UnaryFunctions = {
     [Token.Types.Plus] = function(Self: Interpreter, Operator: Token, Value: any): any
@@ -853,11 +846,11 @@ Interpreter.AssignmentFunctions = {
 } :: { [number]: (Left: any, Operator: Token, Right: any) -> any }
 
 Interpreter.LiteralEvaluations = {
-    [Token.Types.Number] = function(Self: Interpreter, Token: Token): Reference
+    [Token.Types.Number] = function(Self: Interpreter, Environment: Environment, Token: Token): Reference
         return Reference.New(tonumber(Token.Lexeme))
     end,
-    [Token.Types.Identifier] = function(Self: Interpreter, Token: Token): Reference
-        local Result = Self.Environment:Find(Token.Lexeme)
+    [Token.Types.Identifier] = function(Self: Interpreter, Environment: Environment, Token: Token): Reference
+        local Result = Environment:Find(Token.Lexeme) or Self.GlobalEnvironment:Find(Token.Lexeme)
 
         if not Result then
             Interpreter.Error(Token, `Attempt to access undefined variable '{Token.Lexeme}'`)
@@ -865,19 +858,19 @@ Interpreter.LiteralEvaluations = {
 
         return Result or Reference.New(nil)
     end,
-    [Token.Types.String] = function(Self: Interpreter, Token: Token): Reference
+    [Token.Types.String] = function(Self: Interpreter, Environment: Environment, Token: Token): Reference
         return Reference.New(Token.Lexeme)
     end,
-    [Token.Types.True] = function(Self: Interpreter, Token: Token): Reference
+    [Token.Types.True] = function(Self: Interpreter, Environment: Environment, Token: Token): Reference
         return Reference.New(true)
     end,
-    [Token.Types.False] = function(Self: Interpreter, Token: Token): Reference
+    [Token.Types.False] = function(Self: Interpreter, Environment: Environment, Token: Token): Reference
         return Reference.New(false)
     end,
-    [Token.Types.Nil] = function(Self: Interpreter, Token: Token): Reference
+    [Token.Types.Nil] = function(Self: Interpreter, Environment: Environment, Token: Token): Reference
         return Reference.New(nil)
     end,
-} :: { [number]: (Self: Interpreter, Token: Token) -> Reference }
+} :: { [number]: (Self: Interpreter, Environment: Environment, Token: Token) -> Reference }
 
 Interpreter.ExpressionMap = {
     LiteralExpression = Interpreter.EvaluateLiteralExpression,
@@ -890,6 +883,6 @@ Interpreter.ExpressionMap = {
     IndexExpression = Interpreter.EvaluateIndexExpression,
     FunctionExpression = Interpreter.EvaluateFunctionExpression,
     TableExpression = Interpreter.EvaluateTableExpression,
-} :: { [string]: (Self: Interpreter, Expression: Expression) -> any }
+} :: { [string]: (Self: Interpreter, Environment: Environment, Expression: Expression) -> any }
 
 return Interpreter
